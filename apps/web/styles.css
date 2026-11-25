@@ -809,11 +809,6 @@ input:focus {
   margin-left: 3px;
 }
 
-.turn-text {
-  margin-left: auto;
-  color: var(--brass-l);
-}
-
 /* 操作の案内は、選ぶカードのすぐ上に置く。
    バーの右端まで飛ばすと、目が 1100px 往復することになる。 */
 .hand-hint {
@@ -1506,12 +1501,6 @@ input:focus {
   .me-bar {
     gap: 10px;
     font-size: var(--fs-xs);
-  }
-
-  .turn-text {
-    width: 100%;
-    margin-left: 0;
-    text-align: right;
   }
 
   .bid-medal-btn {
