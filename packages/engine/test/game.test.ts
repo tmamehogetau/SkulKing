@@ -156,7 +156,7 @@ describe("ゲーム進行", () => {
     ).not.toThrow();
   });
 
-  it("タイグレスは扱いを指定しないと出せない", () => {
+  it("ティグレスは扱いを指定しないと出せない", () => {
     const state = createGame({ players: [{ name: "A" }, { name: "B" }], seed: 9 });
     state.phase = "playing";
     state.players[0]!.hand = [special("tigress")];

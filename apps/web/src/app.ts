@@ -746,7 +746,7 @@ function Table(props: {
       ${tigressCard &&
       html`<div class="overlay">
         <div class="panel">
-          <h2>タイグレスをどう出す？</h2>
+          <h2>ティグレスをどう出す？</h2>
           <p class="panel-sub">海賊なら色札に勝ち、逃走なら負けます。</p>
           <div class="actions">
             <button class="ghost" onClick=${() => setTigressCard(null)}>やめる</button>
@@ -1144,7 +1144,7 @@ function RulesOverlay(props: { onClose: () => void }) {
             <h3>出せる札</h3>
             <p>
               リードが色札なら、その色を持っている人は必ずその色を出します。持っていなければ何を出してもかまいません。
-              海賊・人魚・スカルキング・逃走・タイグレスのような特殊札は、いつでも出せます。
+              海賊・人魚・スカルキング・逃走・ティグレスのような特殊札は、いつでも出せます。
             </p>
             <p>
               リードが特殊札なら全員自由。逃走がリードのときは、そのトリックで最初に出た色札の色がリードスートになります。

@@ -70,7 +70,7 @@ describe("マストフォロー", () => {
     expect(legalPlays(hand, trick)).toHaveLength(2);
   });
 
-  it("タイグレスは海賊と逃走の 2 択になる", () => {
+  it("ティグレスは海賊と逃走の 2 択になる", () => {
     const hand = [special("tigress")];
     const trick = emptyTrick({ leadSuit: "green", plays: [play(0, suit("green", 7))] });
     const legal = legalPlays(hand, trick);
@@ -175,7 +175,7 @@ describe("トリック裁定", () => {
     expect(result.winnerSeat).toBe(1);
   });
 
-  it("タイグレスを海賊として出せば色カードに勝つ", () => {
+  it("ティグレスを海賊として出せば色カードに勝つ", () => {
     const result = resolveTrick(
       [play(0, suit("purple", 12)), play(1, special("tigress"), "pirate")],
       "purple",
@@ -183,7 +183,7 @@ describe("トリック裁定", () => {
     expect(result.winnerSeat).toBe(1);
   });
 
-  it("タイグレスを逃走として出せば負ける", () => {
+  it("ティグレスを逃走として出せば負ける", () => {
     const result = resolveTrick(
       [play(0, suit("purple", 2)), play(1, special("tigress"), "escape")],
       "purple",
@@ -283,7 +283,7 @@ describe("ボーナス", () => {
     expect(result.bonuses).toEqual([{ to: 1, points: 40, reason: "skullKingByMermaid" }]);
   });
 
-  it("海賊として出したタイグレスは海賊 1 枚として数える", () => {
+  it("海賊として出したティグレスは海賊 1 枚として数える", () => {
     const result = resolveTrick(
       [play(0, special("mermaid", "mermaid-2")), play(1, special("tigress"), "pirate")],
       null,

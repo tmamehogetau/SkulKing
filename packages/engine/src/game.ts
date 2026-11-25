@@ -214,7 +214,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       const card = player.hand[handIndex] as Card;
 
       if (card.kind === "tigress" && !action.tigressAs) {
-        throw new GameError("tigress_choice", "タイグレスは海賊か逃走かを選んでください");
+        throw new GameError("tigress_choice", "ティグレスは海賊か逃走かを選んでください");
       }
 
       const legal = legalPlays(player.hand, next.current).some(

@@ -2,7 +2,7 @@ export type Suit = "green" | "yellow" | "purple" | "black";
 
 export type PirateId = "rosie" | "bendt" | "rascal" | "juanita" | "harry";
 
-/** タイグレスを出したときに選ぶ扱い。 */
+/** ティグレスを出したときに選ぶ扱い。 */
 export type TigressUse = "pirate" | "escape";
 
 export type SpecialKind =
@@ -96,7 +96,7 @@ export type ResolvedKind =
   | "whiteWhale"
   | "loot";
 
-/** タイグレスの選択を反映した「実際の扱い」。 */
+/** ティグレスの選択を反映した「実際の扱い」。 */
 export function resolvedKind(card: Card, tigressAs?: TigressUse): ResolvedKind {
   if (card.kind === "tigress") {
     return tigressAs === "escape" ? "escape" : "pirate";
