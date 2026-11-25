@@ -601,6 +601,22 @@ function Table(props: {
   const lastRoundRef = useRef(view.round);
   const lastMyTurnRef = useRef(false);
 
+  // トリックが決まった直後は、結果を少しだけ見せる。
+  // 演出が残ったまま次の札を出せると、何が起きたのか分からないまま手が進む。
+  const [holding, setHolding] = useState(false);
+  const lastTrickCountRef = useRef(view.tricks.length);
+
+  useEffect(() => {
+    if (view.tricks.length <= lastTrickCountRef.current) {
+      lastTrickCountRef.current = view.tricks.length;
+      return;
+    }
+    lastTrickCountRef.current = view.tricks.length;
+    setHolding(true);
+    const timer = window.setTimeout(() => setHolding(false), 1200);
+    return () => window.clearTimeout(timer);
+  }, [view.tricks.length]);
+
   const lastBannerAtRef = useRef(0);
   const showBanner = (title: string, sub: string): void => {
     // ラウンド開始と手番開始が同時に来たときは、先に出たほうを残す
@@ -661,7 +677,7 @@ function Table(props: {
           )}
         </div>
 
-        <${Arena} view=${view}>
+        <${Arena} view=${view} showResolved=${holding}>
           ${view.phase === "bidding" &&
           html`<div class=${`bid-bar${myTurn ? " is-mine" : ""}`}>
             <span class="bid-label">ビッド</span>
@@ -683,7 +699,7 @@ function Table(props: {
           </div>`}
         </${Arena}>
 
-        <div class=${`me-zone${myTurn ? " is-active" : ""}`}>
+        <div class=${`me-zone${myTurn ? " is-active" : ""}${holding ? " is-hold" : ""}`}>
           <div class="me-bar">
             ${myTurn && html`<span class="turn-chip">あなたの番</span>`}
             <span class="me-name">${me?.name ?? "あなた"}<span class="tag">あなた</span></span>
@@ -697,7 +713,10 @@ function Table(props: {
           <div class="hand">
             ${hand.map((card, index) => {
               const enabled =
-                view.phase === "playing" && myTurn && (optionsByCard.get(card.id)?.length ?? 0) > 0;
+                view.phase === "playing" &&
+                myTurn &&
+                !holding &&
+                (optionsByCard.get(card.id)?.length ?? 0) > 0;
               const mid = (hand.length - 1) / 2;
               const angle = (index - mid) * 2.4;
               return html`<${CardView}
@@ -798,11 +817,13 @@ function OpponentPlate(props: { player: PublicPlayer; active: boolean; disconnec
   `;
 }
 
-function Arena(props: { view: PlayerView; hideHead?: boolean; children?: unknown }) {
+function Arena(props: { view: PlayerView; showResolved?: boolean; hideHead?: boolean; children?: unknown }) {
   const { view } = props;
   const current = view.currentTrick;
   const last = view.tricks.length > 0 ? view.tricks[view.tricks.length - 1] ?? null : null;
-  const shown = current && current.plays.length > 0 ? current : last;
+  // 決まったトリックは、結果の見せ場が終わるまで表示する（showResolved）。
+  // 見せ場の最中に次のトリックが始まっても、勝ち札を消さない。
+  const shown = props.showResolved && last ? last : current && current.plays.length > 0 ? current : null;
   const nameOf = (seat: number): string =>
     view.players.find((player) => player.seat === seat)?.name ?? `席 ${seat}`;
 
