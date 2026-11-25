@@ -690,8 +690,9 @@ function Table(props: {
             <span class="me-stat">ビッド <b>${view.you.bid ?? "–"}</b></span>
             <span class="me-stat">取得 <b>${me?.tricksWon ?? 0}</b></span>
             <span class="me-stat">手札 <b>${view.you.hand.length}</b></span>
-            <span class="turn-text">${turnText(view, busy)}</span>
           </div>
+
+          <p class=${`hand-hint${myTurn ? " is-mine" : ""}`}>${turnText(view, busy)}</p>
 
           <div class="hand">
             ${hand.map((card, index) => {
@@ -769,6 +770,12 @@ function OpponentPlate(props: { player: PublicPlayer; active: boolean; disconnec
     <div class=${`opponent${props.active ? " is-active" : ""}`}>
       <div class="opp-head">
         <span class="opp-name">
+          <img
+            class="seat-emblem opp-emblem"
+            src=${`/assets/emblems/${SEAT_EMBLEMS[props.player.seat % SEAT_EMBLEMS.length]}.webp`}
+            alt=""
+            draggable="false"
+          />
           ${props.player.name}
           ${props.disconnected ? html`<span class="tag">切断</span>` : null}
         </span>
@@ -791,7 +798,7 @@ function OpponentPlate(props: { player: PublicPlayer; active: boolean; disconnec
   `;
 }
 
-function Arena(props: { view: PlayerView; children?: unknown }) {
+function Arena(props: { view: PlayerView; hideHead?: boolean; children?: unknown }) {
   const { view } = props;
   const current = view.currentTrick;
   const last = view.tricks.length > 0 ? view.tricks[view.tricks.length - 1] ?? null : null;
@@ -833,19 +840,21 @@ function Arena(props: { view: PlayerView; children?: unknown }) {
 
   return html`
     <div class="arena">
-      <div class="arena-head">
-        ${shown.leadSuit
-          ? html`<div class=${`lead-badge lead-badge--${shown.leadSuit}`}>
-              <span class="lead-caption">リード</span>
-              <${SuitGlyph} suit=${shown.leadSuit} />
-              <span class="lead-name">${SUIT_LABEL[shown.leadSuit]}</span>
-            </div>`
-          : html`<div class="lead-badge is-none">
-              <span class="lead-caption">リード</span>
-              <span class="lead-name">なし</span>
-            </div>`}
-        <span class="trick-tag">TRICK ${shown.index} / ${view.round}</span>
-      </div>
+      ${props.hideHead
+        ? null
+        : html`<div class="arena-head">
+            ${shown.leadSuit
+              ? html`<div class=${`lead-badge lead-badge--${shown.leadSuit}`}>
+                  <span class="lead-caption">リード</span>
+                  <${SuitGlyph} suit=${shown.leadSuit} />
+                  <span class="lead-name">${SUIT_LABEL[shown.leadSuit]}</span>
+                </div>`
+              : html`<div class="lead-badge is-none">
+                  <span class="lead-caption">リード</span>
+                  <span class="lead-name">なし</span>
+                </div>`}
+            <span class="trick-tag">TRICK ${shown.index} / ${view.round}</span>
+          </div>`}
 
       <div class="plays">
         ${plays.map(
@@ -855,7 +864,7 @@ function Arena(props: { view: PlayerView; children?: unknown }) {
               key=${play.seat}
             >
               <span class="play-name">${nameOf(play.seat)}</span>
-              <${CardView} card=${play.card} tigressAs=${play.tigressAs} size="sm" />
+              <${CardView} card=${play.card} tigressAs=${play.tigressAs} size=${plays.length <= 3 ? "md" : "sm"} />
             </div>
           `,
         )}
@@ -916,7 +925,7 @@ function CompassGlyph() {
 function CardView(props: {
   card: GameCard;
   tigressAs?: TigressUse;
-  size?: "lg" | "sm" | "xs";
+  size?: "lg" | "md" | "sm" | "xs";
   state?: "play" | "off" | "idle";
   selected?: boolean;
   style?: string;
@@ -1008,12 +1017,7 @@ function RoundOverlay(props: {
                     <span class="bid-chip${row.bidMade ? " is-made" : ""}">${row.bid}</span>
                   </td>
                   <td>
-                    <span class="trick-dots">
-                      ${Array.from(
-                        { length: row.tricks },
-                        (_, index) => html`<span class="dot" key=${index} />`,
-                      )}
-                    </span>
+                    <span class="trick-count">${row.tricks}</span>
                   </td>
                   <td>${row.bonus > 0 ? `+${row.bonus}` : "–"}</td>
                   <td class=${row.total >= 0 ? "positive" : "negative"}>
