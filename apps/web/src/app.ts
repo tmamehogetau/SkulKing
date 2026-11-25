@@ -334,7 +334,7 @@ function Home(props: {
             class="code-input"
             value=${code}
             maxlength="4"
-            placeholder="ABCD"
+            placeholder="4文字のコード"
             onInput=${(event: Event) =>
               setCode((event.target as HTMLInputElement).value.toUpperCase())}
           />
@@ -364,10 +364,29 @@ function LobbyScreen(props: {
   onLeave: () => void;
 }) {
   const lobby = props.lobby;
+  const [copied, setCopied] = useState(false);
   if (!lobby) return html`<p class="hint">部屋を準備しています…</p>`;
 
   const isHost = lobby.hostSeat === props.session.seat;
   const humans = lobby.seats.filter((seat) => !seat.bot).length;
+  // ルームコードは他人に伝えるための文字列なので、一手でコピーできるようにする。
+  const copyCode = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(lobby.code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // クリップボードが使えない環境では、選択して Ctrl+C に任せる。
+      const range = document.createRange();
+      const codeNode = document.querySelector(".code");
+      const selection = window.getSelection();
+      if (codeNode && selection) {
+        range.selectNodeContents(codeNode);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+  };
 
   return html`
     <div class="lobby">
@@ -375,7 +394,10 @@ function LobbyScreen(props: {
         <div class="brand-mark">${SkullGlyph()}</div>
         <div>
           <p class="hint left">ルームコード</p>
-          <div class="code">${lobby.code}</div>
+          <div class="code-row">
+            <div class="code">${lobby.code}</div>
+            <button class="copy-btn" onClick=${copyCode}>${copied ? "コピー済み" : "コピー"}</button>
+          </div>
           <p class="hint left">
             このコードを船員に伝えてください（${humans} 人乗船中・最大 6 人）
           </p>
@@ -779,19 +801,21 @@ function Arena(props: { view: PlayerView; children?: unknown }) {
 
   if (!shown) {
     const turnName = view.players.find((player) => player.seat === view.turnSeat)?.name ?? "他の人";
+    // ビッド中はフェーズ名を出さない。HUD の ROUND 表示とビッドの金貨、
+    // 下の案内文で足りているので、同じことを三度言わない。
+    const idleLine =
+      view.phase === "playing"
+        ? view.turnSeat === view.you.seat
+          ? "あなたの番です"
+          : `${turnName} がカードを選んでいます`
+        : view.phase === "bidding"
+          ? ""
+          : `ラウンド ${view.round}・手札 ${view.round} 枚`;
     return html`
       <div class="arena">
         <div class="arena-idle">
           <div class="arena-idle-mark">${CompassGlyph()}</div>
-          <p>
-            ${view.phase === "playing"
-              ? view.turnSeat === view.you.seat
-                ? "あなたの番です"
-                : `${turnName} がカードを選んでいます`
-              : view.phase === "bidding"
-                ? `ラウンド ${view.round}・ビッドの時間`
-                : `ラウンド ${view.round}・手札 ${view.round} 枚`}
-          </p>
+          ${idleLine ? html`<p>${idleLine}</p>` : null}
         </div>
         ${props.children}
       </div>

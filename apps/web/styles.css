@@ -105,7 +105,14 @@ button.primary:hover:not(:disabled) {
 
 button.ghost {
   background: transparent;
-  border-color: rgba(201, 162, 39, 0.25);
+  border-color: rgba(201, 162, 39, 0.18);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+button.ghost:hover:not(:disabled) {
+  color: var(--text);
+  border-color: rgba(201, 162, 39, 0.4);
 }
 
 input {
@@ -154,9 +161,11 @@ input:focus {
 
 .home {
   max-width: 460px;
-  margin: 7vh auto 0;
+  margin: 0 auto;
+  min-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 16px;
 }
 
@@ -288,6 +297,12 @@ input:focus {
   font-family: ui-monospace, Consolas, monospace;
 }
 
+/* プレースホルダは日本語なので、コード用の字間を当てない */
+.code-input::placeholder {
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
 .hint {
   color: var(--muted);
   font-size: var(--fs-sm);
@@ -326,6 +341,27 @@ input:focus {
   letter-spacing: 0.26em;
   color: var(--brass-l);
   text-shadow: 0 2px 10px rgba(201, 162, 39, 0.25);
+  user-select: all;
+}
+
+.code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.copy-btn {
+  font-size: var(--fs-xs);
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid rgba(201, 162, 39, 0.22);
+}
+
+.copy-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: rgba(201, 162, 39, 0.5);
 }
 
 .seats {
@@ -657,15 +693,6 @@ input:focus {
   color: var(--muted);
 }
 
-.arena::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: url("/assets/cardback.webp") center / 150px no-repeat;
-  opacity: 0.035;
-  pointer-events: none;
-}
-
 .lead-tag b {
   color: var(--brass-l);
   font-family: var(--font-display);
@@ -852,8 +879,8 @@ input:focus {
 }
 
 .card--sm {
-  width: 72px;
-  height: 100px;
+  width: 80px;
+  height: 111px;
 }
 
 .card--suit {
