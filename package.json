@@ -1,0 +1,26 @@
+{
+  "name": "skulking-online",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @skulking/engine && npm run build -w @skulking/protocol && npm run build -w @skulking/web",
+    "start": "npm run build && node apps/server/src/index.ts",
+    "dev": "npm run build && concurrently -n server,web -c cyan,magenta \"node apps/server/src/index.ts\" \"npm run watch -w @skulking/web\"",
+    "dev:server": "node apps/server/src/index.ts",
+    "dev:web": "npm run watch -w @skulking/web",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
+  }
+}
