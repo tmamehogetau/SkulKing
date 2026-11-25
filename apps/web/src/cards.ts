@@ -31,7 +31,7 @@ const SPECIAL_FACES: Record<string, CardFace> = {
   pirate: { mark: "🏴‍☠️", label: "海賊", className: "card special pirate" },
   skullKing: { mark: "👑", label: "スカルキング", className: "card special skull-king" },
   mermaid: { mark: "🧜", label: "人魚", className: "card special mermaid" },
-  tigress: { mark: "🐯", label: "ティグレス", className: "card special tigress" },
+  tigress: { mark: "🗡", label: "ティグレス", className: "card special tigress" },
   escape: { mark: "💨", label: "逃走", className: "card special escape" },
   kraken: { mark: "🐙", label: "クラーケン", className: "card special kraken" },
   whiteWhale: { mark: "🐋", label: "白クジラ", className: "card special whale" },
