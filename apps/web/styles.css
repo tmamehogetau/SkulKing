@@ -1109,6 +1109,33 @@ input:focus {
   transform-origin: 50% 130%;
 }
 
+/* 手番の切り替わりを手札そのもので知らせる。
+   他人の番は少し沈め、自分の番になった瞬間に一度だけ持ち上げる。 */
+.me-zone .hand {
+  opacity: 0.86;
+  transition: opacity 0.2s ease;
+}
+
+.me-zone.is-active .hand {
+  opacity: 1;
+}
+
+.me-zone.is-active .hand .card {
+  animation: handReady 0.55s ease-out 1;
+}
+
+@keyframes handReady {
+  0% {
+    transform: rotate(var(--rot, 0deg)) translateY(var(--lift, 0px));
+  }
+  45% {
+    transform: rotate(var(--rot, 0deg)) translateY(calc(var(--lift, 0px) - 14px));
+  }
+  100% {
+    transform: rotate(var(--rot, 0deg)) translateY(var(--lift, 0px));
+  }
+}
+
 .hand .card:first-child {
   margin-left: 0;
 }
@@ -1850,6 +1877,26 @@ input:focus {
 .arena-result.is-waiting {
   color: var(--muted);
   border: 1px dashed rgba(201, 162, 39, 0.25);
+}
+
+/* 自分の番だと分かるように、待ち札そのものを金の実線に変える。
+   「ニナ が選んでいます」と三人称で出ていたのも、自分の番だと気づきにくい原因だった。 */
+.arena-result.is-waiting.is-mine {
+  color: var(--brass-l);
+  border: 1px solid rgba(201, 162, 39, 0.65);
+  background: rgba(201, 162, 39, 0.12);
+  font-weight: 600;
+  animation: softGlow 1.8s ease-in-out infinite;
+}
+
+@keyframes softGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(232, 203, 132, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(232, 203, 132, 0);
+  }
 }
 
 .seat-play.is-winner .card {

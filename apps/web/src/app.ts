@@ -878,7 +878,11 @@ function Arena(props: { view: PlayerView; hideHead?: boolean; children?: unknown
               <b class="result-name">${winnerName}</b>
               ${bonus > 0 ? html`<span class="result-bonus">+${bonus}</span>` : null}
             </div>`
-        : html`<div class="arena-result is-waiting">${nameOf(view.turnSeat)} が選んでいます</div>`}
+        : html`<div
+            class=${`arena-result is-waiting${view.turnSeat === view.you.seat ? " is-mine" : ""}`}
+          >
+            ${view.turnSeat === view.you.seat ? "あなたの番" : `${nameOf(view.turnSeat)} が選んでいます`}
+          </div>`}
     </div>
   `;
 }
