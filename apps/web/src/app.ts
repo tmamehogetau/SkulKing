@@ -292,6 +292,7 @@ function Home(props: {
 }) {
   const [name, setName] = useState(props.initialName);
   const [code, setCode] = useState("");
+  const [showRules, setShowRules] = useState(false);
   const ready = props.status === "open" && name.trim().length > 0;
 
   return html`
@@ -347,6 +348,10 @@ function Home(props: {
         </div>
       </div>
       ${props.status !== "open" && html`<p class="hint">サーバーに接続中…</p>`}
+      <p class="home-links">
+        <button class="link-btn" onClick=${() => setShowRules(true)}>ルールを見る</button>
+      </p>
+      ${showRules && html`<${RulesOverlay} onClose=${() => setShowRules(false)} />`}
     </div>
   `;
 }
@@ -492,6 +497,7 @@ function Table(props: {
   const [tigressCard, setTigressCard] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [showScores, setShowScores] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const [sentAt, setSentAt] = useState<number | null>(null);
 
   const busy = sentAt !== null && sentAt === view.version;
@@ -557,8 +563,11 @@ function Table(props: {
       setSelected(null);
       setTigressCard(null);
       setShowScores(false);
+      setShowRules(false);
       return;
     }
+    // 何かのパネルが開いている間は、裏の札を動かさない
+    if (showScores || showRules) return;
     if (event.key === "Enter" && selected) {
       const card = hand.find((item) => item.id === selected);
       if (card) play(card);
@@ -661,8 +670,8 @@ function Table(props: {
           <span class="chip chip--round">ROUND ${view.round}/${view.totalRounds}</span>
         </div>
         <div class="hud-actions">
+          <button class="hud-btn" onClick=${() => setShowRules(true)}>ルール</button>
           <button class="hud-btn" onClick=${() => setShowScores(true)}>スコア</button>
-          <button class="hud-btn" onClick=${props.onLeave}>下船</button>
         </div>
       </header>
 
@@ -776,6 +785,7 @@ function Table(props: {
         isHost=${isHost}
         onLeave=${props.onLeave}
       />`}
+      ${showRules && html`<${RulesOverlay} onClose=${() => setShowRules(false)} />`}
       ${showScores &&
       html`<${Scoreboard} view=${view} onClose=${() => setShowScores(false)} />`}
     </div>
@@ -1056,7 +1066,6 @@ function RoundOverlay(props: {
         </table>
 
         <div class="actions">
-          <button class="ghost" onClick=${props.onLeave}>下船する</button>
           <button class="primary" onClick=${() => props.send({ t: "nextRound" })}>
             ${final ? "結果を見る" : "次のラウンド"}
           </button>
@@ -1100,6 +1109,91 @@ function GameOverOverlay(props: {
                 もう一度航海する
               </button>`
             : html`<button disabled>船長の再出航待ち</button>`}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function RulesOverlay(props: { onClose: () => void }) {
+  return html`
+    <div class="overlay" onClick=${props.onClose}>
+      <div class="panel panel--rules" onClick=${(event: Event) => event.stopPropagation()}>
+        <header class="panel-head">
+          <h2>ルール</h2>
+          <button class="ghost" onClick=${props.onClose}>閉じる</button>
+        </header>
+
+        <div class="rules">
+          <section>
+            <h3>流れ</h3>
+            <p>
+              2〜6 人で 10 ラウンド。ラウンド N では手札が N 枚。各ラウンドは「ビッド → トリック → 得点」で、
+              合計点がいちばん高い人の勝ちです。
+            </p>
+          </section>
+
+          <section>
+            <h3>ビッド</h3>
+            <p>
+              そのラウンドで取るトリック数を宣言します。0 も選べます。全員の入力が揃うまで、他人のビッドは見えません。
+            </p>
+          </section>
+
+          <section>
+            <h3>出せる札</h3>
+            <p>
+              リードが色札なら、その色を持っている人は必ずその色を出します。持っていなければ何を出してもかまいません。
+              海賊・人魚・スカルキング・逃走・タイグレスのような特殊札は、いつでも出せます。
+            </p>
+            <p>
+              リードが特殊札なら全員自由。逃走がリードのときは、そのトリックで最初に出た色札の色がリードスートになります。
+            </p>
+          </section>
+
+          <section>
+            <h3>強さ</h3>
+            <ul>
+              <li>海賊は色札に勝つ（黒は切り札なので、色札の中では最強）</li>
+              <li>人魚は色札とスカルキングに勝つ</li>
+              <li>スカルキングは海賊に勝つ</li>
+              <li>3 種が同じトリックに出たら人魚の勝ち</li>
+              <li>逃走はすべてに負ける</li>
+              <li>同じ強さ同士は先に出したほうが勝ち</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>得点</h3>
+            <table class="rules-table">
+              <tbody>
+                <tr><th>ビッド 1 以上・的中</th><td>+20 × ビッド数 ＋ ボーナス</td></tr>
+                <tr><th>ビッド 1 以上・失敗</th><td>−10 × ズレた枚数</td></tr>
+                <tr><th>ビッド 0・0 枚で終了</th><td>+10 × ラウンド数</td></tr>
+                <tr><th>ビッド 0・1 枚以上取った</th><td>−10 × ラウンド数</td></tr>
+              </tbody>
+            </table>
+            <p class="rules-note">ビッドを外すと、ボーナスはすべて没収されます。</p>
+            <table class="rules-table">
+              <tbody>
+                <tr><th>14（緑・黄・紫）</th><td>1 枚 +10</td></tr>
+                <tr><th>黒の 14</th><td>1 枚 +20</td></tr>
+                <tr><th>海賊が人魚を取った</th><td>人魚 1 枚 +20</td></tr>
+                <tr><th>スカルキングが海賊を取った</th><td>海賊 1 枚 +30</td></tr>
+                <tr><th>人魚がスカルキングを取った</th><td>+40</td></tr>
+              </tbody>
+            </table>
+            <p class="rules-note">ボーナスは、自分が取ったトリックの中身に対して付きます。</p>
+          </section>
+
+          <section>
+            <h3>拡張カード</h3>
+            <ul>
+              <li>クラーケン — 出たらそのトリックは流れ、誰も取りません</li>
+              <li>白クジラ — 特殊札が勝てなくなり、場の色札の数字で決まります</li>
+              <li>略奪品 — 取った人と出した人が両方ビッドを当てていれば +20</li>
+            </ul>
+          </section>
         </div>
       </div>
     </div>

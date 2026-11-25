@@ -1250,6 +1250,96 @@ input:focus {
   width: min(720px, 100%);
 }
 
+/* ルール説明。長いので .panel の max-height + overflow でスクロールさせる。 */
+.panel--rules {
+  width: min(760px, 100%);
+}
+
+.rules section {
+  margin-bottom: 16px;
+}
+
+.rules section:last-child {
+  margin-bottom: 0;
+}
+
+.rules h3 {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  letter-spacing: 0.1em;
+  color: var(--brass-l);
+  margin: 0 0 6px;
+}
+
+.rules p {
+  margin: 0 0 6px;
+  font-size: var(--fs-sm);
+  line-height: 1.75;
+  color: var(--text);
+}
+
+.rules ul {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  font-size: var(--fs-sm);
+  line-height: 1.8;
+  color: var(--text);
+}
+
+.rules-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4px 0 8px;
+  font-size: var(--fs-sm);
+}
+
+.rules-table th,
+.rules-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(201, 162, 39, 0.14);
+  text-align: left;
+  vertical-align: top;
+}
+
+.rules-table th {
+  width: 46%;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.rules-table td {
+  color: var(--text);
+}
+
+.rules-note {
+  margin: 0 0 8px;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+
+/* ホームの「ルールを見る」。ボタン既定の枠と余白を消してリンクとして置く。 */
+.home-links {
+  margin: 2px 0 0;
+  text-align: center;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  color: var(--brass-l);
+  border: none;
+  background: none;
+}
+
 .panel-head {
   display: flex;
   align-items: baseline;
