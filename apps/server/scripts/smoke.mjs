@@ -155,7 +155,17 @@ for (let guard = 0; guard < 4000; guard += 1) {
           view.lastRound.players.map((p) => `${p.bid}/${p.tricks}`).join(" "),
       );
     }
-    await alice.sendAndWait({ t: "nextRound" });
+    // 接続中の人間は 2 人。1 人だけでは次へ進まないことを確かめてから、2 人目を押す。
+    const roundBefore = view.round;
+    alice.send({ t: "nextRound" });
+    await sleep(250);
+    check(alice.view.phase === "roundEnd", "a single ready player does not advance");
+    check(alice.view.round === roundBefore, "round stays until everyone is ready");
+    bob.send({ t: "nextRound" });
+    await alice.waitFor(
+      (m) => m.t === "state" && (m.view.round > roundBefore || m.view.phase === "gameEnd"),
+      "round advanced after both ready",
+    );
     continue;
   }
 

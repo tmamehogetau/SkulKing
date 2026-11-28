@@ -151,6 +151,7 @@ wss.on("connection", (ws: WebSocket) => {
           seat: seatIndex,
         });
         broadcast(room);
+        room.refreshReady();
         return;
       }
 
@@ -209,8 +210,8 @@ wss.on("connection", (ws: WebSocket) => {
       }
 
       case "nextRound": {
-        const { room } = requireSession();
-        room.act({ type: "nextRound" });
+        const { room, seat } = requireSession();
+        room.markReady(seat);
         return;
       }
 
@@ -235,6 +236,8 @@ wss.on("connection", (ws: WebSocket) => {
         if (seatInfo) {
           seatInfo.conn = null;
           broadcast(room);
+          // 抜けた人を待たずに済むよう、残りの準備状況を見直す
+          room.refreshReady();
         }
         if (room.players().every(({ seatInfo: s }) => s.conn === null)) rooms.remove(room.code);
         return;
@@ -277,6 +280,8 @@ wss.on("connection", (ws: WebSocket) => {
       seatInfo.conn = null;
       room.lastActivity = Date.now();
       broadcast(room);
+      // ラウンド終了画面で待っている最中に抜けたら、残りの人だけで進める
+      room.refreshReady();
     }
     session = null;
   });

@@ -6,6 +6,8 @@ export interface LobbySeat {
   name: string;
   bot: boolean;
   connected: boolean;
+  /** ラウンド終了画面で「次へ」を押したか。ボットと切断中の席は常に準備完了扱い。 */
+  ready: boolean;
 }
 
 export type ClientMessage =

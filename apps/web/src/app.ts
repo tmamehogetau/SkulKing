@@ -2,15 +2,18 @@ import htmImport from "htm";
 import { h } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type {
+  BonusReason,
   Card as GameCard,
   PlayerView,
   RoundSummary,
   Suit,
   TigressUse,
+  TrickBonus,
 } from "@skulking/engine";
 import type { ClientMessage, ServerMessage } from "@skulking/protocol";
 import { artOf, faceOf, sortHand, SUIT_LABEL } from "./cards.js";
 import { connect, type Net, type NetStatus } from "./net.js";
+import { loadMuted, playSound, saveMuted, unlockAudio } from "./sound.js";
 
 // htm のテンプレートは VNode を返すが、型は緩く扱う（HTML 断片をそのまま h に渡すため）
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -108,11 +111,34 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   /** 対戦から離れた状態。トークンは残すので「戻る」で同じ席に復帰できる。 */
   const [detached, setDetached] = useState(false);
+  const [muted, setMuted] = useState<boolean>(loadMuted);
   const [netKey, setNetKey] = useState(0);
   const netRef = useRef<Net | null>(null);
   const sessionRef = useRef<Session | null>(session);
   /** 接続が閉じている間に入力されたメッセージを、再接続時に送る。 */
   const pendingRef = useRef<ClientMessage | null>(null);
+
+  const toggleMute = (): void => {
+    setMuted((prev) => {
+      const next = !prev;
+      saveMuted(next);
+      if (!next) {
+        unlockAudio();
+        playSound("bid", false);
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const onFirstInput = (): void => unlockAudio();
+    window.addEventListener("pointerdown", onFirstInput, { passive: true });
+    window.addEventListener("keydown", onFirstInput);
+    return () => {
+      window.removeEventListener("pointerdown", onFirstInput);
+      window.removeEventListener("keydown", onFirstInput);
+    };
+  }, []);
 
   useEffect(() => {
     setStatus("connecting");
@@ -256,6 +282,8 @@ export function App() {
             status=${status}
             initialName=${loadName()}
             resumable=${detached ? session : null}
+            muted=${muted}
+            onToggleMute=${toggleMute}
             onCreate=${createRoom}
             onJoin=${joinRoom}
             onResume=${resume}
@@ -265,6 +293,8 @@ export function App() {
               view=${view}
               lobby=${lobby}
               session=${session}
+              muted=${muted}
+              onToggleMute=${toggleMute}
               send=${send}
               onLeave=${leave}
             />`
@@ -286,6 +316,8 @@ function Home(props: {
   status: NetStatus;
   initialName: string;
   resumable: Session | null;
+  muted: boolean;
+  onToggleMute: () => void;
   onCreate: (name: string) => void;
   onJoin: (name: string, code: string) => void;
   onResume: () => void;
@@ -350,6 +382,14 @@ function Home(props: {
       ${props.status !== "open" && html`<p class="hint">サーバーに接続中…</p>`}
       <p class="home-links">
         <button class="link-btn" onClick=${() => setShowRules(true)}>ルールを見る</button>
+        <span class="home-links-sep" aria-hidden="true">・</span>
+        <button
+          class="link-btn"
+          aria-pressed=${!props.muted}
+          onClick=${props.onToggleMute}
+        >
+          ${props.muted ? "効果音: OFF" : "効果音: ON"}
+        </button>
       </p>
       ${showRules && html`<${RulesOverlay} onClose=${() => setShowRules(false)} />`}
     </div>
@@ -490,6 +530,8 @@ function Table(props: {
   view: PlayerView;
   lobby: LobbyMessage | null;
   session: Session;
+  muted: boolean;
+  onToggleMute: () => void;
   send: (message: ClientMessage) => void;
   onLeave: () => void;
 }) {
@@ -499,6 +541,8 @@ function Table(props: {
   const [showScores, setShowScores] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [sentAt, setSentAt] = useState<number | null>(null);
+  const mutedRef = useRef(props.muted);
+  mutedRef.current = props.muted;
 
   const busy = sentAt !== null && sentAt === view.version;
   const myTurn = view.you.canAct && !busy;
@@ -549,6 +593,7 @@ function Table(props: {
 
   const bid = (value: number): void => {
     if (view.phase !== "bidding" || !myTurn) return;
+    playSound("bid", mutedRef.current);
     act({ t: "bid", bid: value });
   };
 
@@ -614,6 +659,16 @@ function Table(props: {
   // 演出が残ったまま次の札を出せると、何が起きたのか分からないまま手が進む。
   const [holding, setHolding] = useState(false);
   const lastTrickCountRef = useRef(view.tricks.length);
+  const lastPlayCountRef = useRef(view.currentTrick?.plays.length ?? 0);
+  const lastPhaseRef = useRef(view.phase);
+
+  useEffect(() => {
+    const count = view.currentTrick?.plays.length ?? 0;
+    if (count > lastPlayCountRef.current) {
+      playSound("card", mutedRef.current);
+    }
+    lastPlayCountRef.current = count;
+  }, [view.currentTrick?.index, view.currentTrick?.plays.length]);
 
   useEffect(() => {
     if (view.tricks.length <= lastTrickCountRef.current) {
@@ -621,10 +676,30 @@ function Table(props: {
       return;
     }
     lastTrickCountRef.current = view.tricks.length;
+    const latest = view.tricks[view.tricks.length - 1];
+    if (latest) {
+      if (latest.discarded) {
+        playSound("trickDiscard", mutedRef.current);
+      } else if (latest.winnerSeat === view.you.seat) {
+        playSound("trickWin", mutedRef.current);
+      } else {
+        playSound("trickOther", mutedRef.current);
+      }
+    }
     setHolding(true);
     const timer = window.setTimeout(() => setHolding(false), 1200);
     return () => window.clearTimeout(timer);
   }, [view.tricks.length]);
+
+  useEffect(() => {
+    if (view.phase === lastPhaseRef.current) return;
+    lastPhaseRef.current = view.phase;
+    if (view.phase === "roundEnd") {
+      playSound("roundEnd", mutedRef.current);
+    } else if (view.phase === "gameEnd") {
+      playSound("gameEnd", mutedRef.current);
+    }
+  }, [view.phase]);
 
   const lastBannerAtRef = useRef(0);
   const showBanner = (title: string, sub: string): void => {
@@ -643,6 +718,7 @@ function Table(props: {
   useEffect(() => {
     if (myTurn && !lastMyTurnRef.current) {
       showBanner("あなたの番", view.phase === "bidding" ? "取るトリック数を宣言" : "出すカードを選ぶ");
+      playSound("turn", mutedRef.current);
     }
     lastMyTurnRef.current = myTurn;
   }, [myTurn, view.phase, view.round]);
@@ -670,6 +746,14 @@ function Table(props: {
           <span class="chip chip--round">ROUND ${view.round}/${view.totalRounds}</span>
         </div>
         <div class="hud-actions">
+          <button
+            class=${`hud-btn${props.muted ? " is-muted" : ""}`}
+            aria-pressed=${!props.muted}
+            title=${props.muted ? "効果音をONにする" : "効果音をOFFにする"}
+            onClick=${props.onToggleMute}
+          >
+            ${props.muted ? "音 OFF" : "音 ON"}
+          </button>
           <button class="hud-btn" onClick=${() => setShowRules(true)}>ルール</button>
           <button class="hud-btn" onClick=${() => setShowScores(true)}>スコア</button>
         </div>
@@ -775,6 +859,7 @@ function Table(props: {
       html`<${RoundOverlay}
         summary=${view.lastRound}
         view=${view}
+        lobby=${props.lobby}
         send=${send}
         onLeave=${props.onLeave}
       />`}
@@ -1012,9 +1097,40 @@ function CardView(props: {
 // 結果表示
 // ---------------------------------------------------------------------------
 
+const BONUS_REASON_LABEL: Record<BonusReason, string> = {
+  fourteen: "14",
+  blackFourteen: "黒14",
+  mermaidByPirate: "人魚捕獲",
+  pirateBySkullKing: "海賊捕獲",
+  skullKingByMermaid: "王捕獲",
+  lootAlliance: "略奪品",
+};
+
+interface BonusTagItem {
+  reason: BonusReason;
+  label: string;
+  points: number;
+}
+
+function summarizeBonuses(bonuses: TrickBonus[]): BonusTagItem[] {
+  const grouped = new Map<BonusReason, { count: number; points: number }>();
+  for (const item of bonuses) {
+    const prev = grouped.get(item.reason) ?? { count: 0, points: 0 };
+    grouped.set(item.reason, { count: prev.count + 1, points: prev.points + item.points });
+  }
+  const result: BonusTagItem[] = [];
+  for (const [reason, { count, points }] of grouped) {
+    const base = BONUS_REASON_LABEL[reason];
+    const label = count > 1 ? `${base}×${count}` : base;
+    result.push({ reason, label, points });
+  }
+  return result;
+}
+
 function RoundOverlay(props: {
   summary: RoundSummary;
   view: PlayerView;
+  lobby: LobbyMessage | null;
   send: (message: ClientMessage) => void;
   onLeave: () => void;
 }) {
@@ -1023,6 +1139,15 @@ function RoundOverlay(props: {
     props.view.players.find((player) => player.seat === seat)?.name ?? `席 ${seat}`;
 
   const ranked = [...props.summary.players].sort((a, b) => b.total - a.total);
+
+  // 次へ進めるのは接続中の人間全員が押したとき。ボットと切断中の席は待たない。
+  const humans = (props.lobby?.seats ?? []).filter((seat) => !seat.bot && seat.connected);
+  const readyCount = humans.filter((seat) => seat.ready).length;
+  const waiting = humans.length > 1;
+  const myReady = humans.find((seat) => seat.seat === props.view.you.seat)?.ready === true;
+  const readySeats = new Set(
+    (props.lobby?.seats ?? []).filter((seat) => seat.ready && !seat.bot).map((seat) => seat.seat),
+  );
 
   return html`
     <div class="overlay">
@@ -1044,31 +1169,57 @@ function RoundOverlay(props: {
             </tr>
           </thead>
           <tbody>
-            ${ranked.map(
-              (row) => html`
+            ${ranked.map((row) => {
+              const tags = summarizeBonuses(row.bonuses ?? []);
+              return html`
                 <tr class=${row.seat === props.view.you.seat ? "is-me" : ""} key=${row.seat}>
-                  <td class="cell-name">${nameOf(row.seat)}</td>
+                  <td class="cell-name">
+                    ${nameOf(row.seat)}
+                    ${waiting && readySeats.has(row.seat) && html`<span class="ready-tag">準備OK</span>`}
+                  </td>
                   <td>
                     <span class="bid-chip${row.bidMade ? " is-made" : ""}">${row.bid}</span>
                   </td>
                   <td>
                     <span class="trick-count">${row.tricks}</span>
                   </td>
-                  <td>${row.bonus > 0 ? `+${row.bonus}` : "–"}</td>
+                  <td class="cell-bonus">
+                    <div class="bonus-sum">${row.bonus > 0 ? `+${row.bonus}` : "–"}</div>
+                    ${tags.length > 0 &&
+                    html`<div class="bonus-list">
+                      ${tags.map(
+                        (tag) => html`
+                          <span
+                            key=${tag.reason}
+                            class=${`bonus-tag${row.bidMade ? "" : " is-lost"}`}
+                            title=${row.bidMade ? `${tag.label} +${tag.points}` : `ビッド失敗により没収 (${tag.label} +${tag.points})`}
+                          >
+                            ${tag.label} +${tag.points}
+                          </span>
+                        `,
+                      )}
+                    </div>`}
+                  </td>
                   <td class=${row.total >= 0 ? "positive" : "negative"}>
                     ${row.total > 0 ? `+${row.total}` : row.total}
                   </td>
                   <td class="cell-total">${row.scoreAfter}</td>
                 </tr>
-              `,
-            )}
+              `;
+            })}
           </tbody>
         </table>
 
         <div class="actions">
-          <button class="primary" onClick=${() => props.send({ t: "nextRound" })}>
-            ${final ? "結果を見る" : "次のラウンド"}
-          </button>
+          ${waiting &&
+          html`<span class="ready-count">
+            準備完了 <b>${readyCount}</b> / ${humans.length} 人
+          </span>`}
+          ${myReady
+            ? html`<button disabled>他の船員を待っています…</button>`
+            : html`<button class="primary" onClick=${() => props.send({ t: "nextRound" })}>
+                ${final ? "結果を見る" : "次のラウンド"}
+              </button>`}
         </div>
       </div>
     </div>

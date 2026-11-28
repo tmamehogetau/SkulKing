@@ -43,6 +43,18 @@ export function chooseBid(state: GameState, seat: number): number {
       case "escape":
         strength -= 0.15;
         break;
+      // 拡張カード。いずれも自分ではトリックを取れないので、取る力としては数えない。
+      case "loot":
+        // 略奪品は勝てないうえ、置いたトリックの勝者に +20 を渡す。持っているだけで不利。
+        strength -= 0.1;
+        break;
+      case "kraken":
+        // クラーケンは流すだけで取れない。強い札を流せるが、ビッドの当てにはならない。
+        break;
+      case "whiteWhale":
+        // 白クジラも自分では勝てない。特殊札を無効化する防御札としてわずかにプラス。
+        strength += 0.05;
+        break;
       default:
         strength += 0.4;
     }
@@ -56,7 +68,17 @@ export function chooseBid(state: GameState, seat: number): number {
 function cardValue(card: Card): number {
   if (card.kind === "suit") return card.suit === "black" ? card.rank + 14 : card.rank;
   if (card.kind === "escape") return 0;
+  // 拡張カードは「取れない札」として扱う。略奪品は早めに手放したいので低く、
+  // クラーケン／白クジラは切り札なので、負け札が尽きるまで温存する。
+  if (card.kind === "loot") return 6;
+  if (card.kind === "whiteWhale") return 16;
+  if (card.kind === "kraken") return 18;
   return 20;
+}
+
+/** 自分ではトリックを取れない札（勝ち筋として数えない）。 */
+function cannotWinBySelf(card: Card): boolean {
+  return card.kind === "loot" || card.kind === "escape";
 }
 
 function winsTrick(state: GameState, seat: number, option: LegalPlay): boolean {
@@ -84,6 +106,7 @@ export function chooseCard(state: GameState, seat: number): LegalPlay | undefine
     const card = player.hand.find((c) => c.id === option.cardId);
     return {
       option,
+      card,
       value: card ? cardValue(card) : 99,
       wins: winsTrick(state, seat, option),
     };
@@ -96,19 +119,26 @@ export function chooseCard(state: GameState, seat: number): LegalPlay | undefine
   if (leading) {
     const sorted = [...scored].sort(byValue);
     if (needTrick) {
-      const best = sorted[sorted.length - 1];
+      // 略奪品と逃走では勝てないので、勝ちにいくときは選ばない
+      const winnable = sorted.filter((s) => s.card && !cannotWinBySelf(s.card));
+      const best = winnable[winnable.length - 1] ?? sorted[sorted.length - 1];
       return best?.option;
     }
     return sorted[0]?.option;
   }
 
   if (needTrick) {
-    const winners = scored.filter((s) => s.wins).sort(byValue);
+    const winners = scored
+      .filter((s) => s.wins && s.card && !cannotWinBySelf(s.card))
+      .sort(byValue);
     if (winners.length > 0) return winners[0]?.option;
+    // 勝てる札が無いときは、いちばん安い札を流す
     const cheapest = [...scored].sort(byValue)[0];
     return cheapest?.option;
   }
 
+  // 取らなくてよい場面。クラーケン／白クジラも「勝てない札」なので、
+  // 安い負け札が尽きたときの逃げ道としてここで自然に使われる。
   const safe = scored.filter((s) => !s.wins).sort(byValue);
   if (safe.length > 0) return safe[0]?.option;
   return [...scored].sort(byValue)[0]?.option;

@@ -39,6 +39,8 @@ export class RoomError extends Error {
 export class Room {
   readonly code: string;
   readonly seats: (Seat | null)[] = Array.from({ length: MAX_SEATS }, () => null);
+  /** ラウンド終了画面で「次へ」を押した席。接続中の人間だけが入る。 */
+  readonly readySeats = new Set<number>();
   state: GameState | null = null;
   options: GameOptions = { ...DEFAULT_OPTIONS };
   hostSeat = 0;
@@ -108,6 +110,7 @@ export class Room {
       throw new RoomError("last_player", "最後の 1 人は退出できません");
     }
     this.seats[seat] = null;
+    this.readySeats.delete(seat);
     if (this.hostSeat === seat) {
       const next = this.players()[0];
       this.hostSeat = next ? next.seat : 0;
@@ -119,6 +122,7 @@ export class Room {
     if (seated.length < 2) throw new RoomError("not_enough_players", "2 人以上で開始できます");
     // 再戦でも版番号が戻らないように、前の対戦の続きから振り直す
     this.versionBase = (this.state?.version ?? -1) + 1;
+    this.readySeats.clear();
     this.state = createGame({
       players: seated.map(({ seat, seatInfo }) => ({
         id: seatInfo.playerId,
@@ -139,6 +143,46 @@ export class Room {
     this.lastActivity = Date.now();
     this.scheduleBot();
     broadcast(this);
+  }
+
+  /**
+   * ラウンド終了画面で「次へ」を押した席を記録する。
+   * 接続中の人間が全員押したときだけ次のラウンドへ進む（ボットと切断中の席は待たない）。
+   */
+  markReady(seat: number): void {
+    const state = this.state;
+    if (!state) throw new RoomError("not_started", "まだ対戦が始まっていません");
+    // 直前の押下で既に次へ進んでいた場合は黙って捨てる。
+    // 全員Ready の自動進行と自分のクリックが競合しても、余計なエラーを出さない。
+    if (state.phase !== "roundEnd") return;
+    this.readySeats.add(seat);
+    this.lastActivity = Date.now();
+    this.advanceIfReady();
+  }
+
+  /** 切断や復帰で待ち人数が変わったときにも呼ぶ。詰まらないように再判定する。 */
+  refreshReady(): void {
+    this.advanceIfReady();
+  }
+
+  private waitingForReady(): number[] {
+    const state = this.state;
+    if (!state || state.phase !== "roundEnd") return [];
+    return this.players()
+      .filter(({ seat, seatInfo }) => !seatInfo.bot && seatInfo.conn !== null && !this.readySeats.has(seat))
+      .map(({ seat }) => seat);
+  }
+
+  private advanceIfReady(): void {
+    const state = this.state;
+    if (!state || state.phase !== "roundEnd") return;
+    if (this.waitingForReady().length > 0) {
+      // 押した人の表示だけ更新して、残りの入力を待つ
+      broadcast(this);
+      return;
+    }
+    this.readySeats.clear();
+    this.act({ type: "nextRound" });
   }
 
   private scheduleBot(): void {
@@ -188,6 +232,7 @@ export function lobbyMessage(room: Room): ServerMessage {
       name: seatInfo.name,
       bot: seatInfo.bot,
       connected: seatInfo.bot || seatInfo.conn !== null,
+      ready: seatInfo.bot || seatInfo.conn === null || room.readySeats.has(seat),
     })),
   };
 }
