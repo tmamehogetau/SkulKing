@@ -69,6 +69,17 @@ const httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
     return;
   }
 
+  // Render などのアイドルスリープ対策。画面を開いているクライアントが 5 分おきに叩く。
+  // キャッシュされると叩かれなくなるので no-store を付ける。
+  if (url.pathname === "/api/keepalive") {
+    res.writeHead(200, {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store, max-age=0",
+    });
+    res.end("ok");
+    return;
+  }
+
   void serveStatic(decodeURIComponent(url.pathname), res);
 });
 

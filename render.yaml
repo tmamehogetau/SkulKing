@@ -1,0 +1,18 @@
+# Render の Blueprint。New > Blueprint でこのリポジトリを指定すると同じ構成で作れる。
+# 画面・エンジン・プロトコルをビルドし、サーバーが apps/web/dist を配信する 1 サービス構成。
+services:
+  - type: web
+    name: skulking
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: node apps/server/src/index.ts
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # サーバーは .ts を直接動かす（型注釈の剥がし）ので 22.18 以上か 23.6 以上が要る。
+      # 範囲指定だと将来 major が上がるため、24 系に留める。
+      - key: NODE_VERSION
+        value: "24"

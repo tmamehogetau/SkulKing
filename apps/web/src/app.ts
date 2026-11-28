@@ -12,6 +12,7 @@ import type {
 } from "@skulking/engine";
 import type { ClientMessage, ServerMessage } from "@skulking/protocol";
 import { artOf, faceOf, sortHand, SUIT_LABEL } from "./cards.js";
+import { startKeepAlive } from "./keepalive.js";
 import { connect, type Net, type NetStatus } from "./net.js";
 import { loadMuted, playSound, saveMuted, unlockAudio } from "./sound.js";
 
@@ -139,6 +140,9 @@ export function App() {
       window.removeEventListener("keydown", onFirstInput);
     };
   }, []);
+
+  // 画面を開いている間だけ、無料プランのアイドルスリープを避ける
+  useEffect(() => startKeepAlive(), []);
 
   useEffect(() => {
     setStatus("connecting");
