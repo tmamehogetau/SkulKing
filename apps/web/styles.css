@@ -417,6 +417,13 @@ input:focus {
   white-space: nowrap;
 }
 
+/* ラウンドの最初に札を出す席。ビッド中だけ付く。 */
+.tag--lead {
+  color: #f6e7bd;
+  border-color: rgba(232, 203, 132, 0.75);
+  background: rgba(232, 203, 132, 0.16);
+}
+
 .settings {
   background: linear-gradient(180deg, #102631, #0b1d26);
   border: 1px solid var(--line);
@@ -599,6 +606,14 @@ input:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 名前は省略するが、リード／切断の札だけは切らない。 */
+.opp-who {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
 }
 
 .bid-medal {
@@ -1870,6 +1885,20 @@ input:focus {
 
 .bid-bar.is-mine .bid-hint {
   color: var(--brass-l);
+}
+
+.bid-lead {
+  flex: 0 0 100%;
+  margin: 3px 0 0;
+  font-size: var(--fs-xs);
+  text-align: center;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.bid-lead b {
+  color: var(--brass-l);
+  font-weight: 600;
 }
 
 .bid-bar.is-mine .bid-medal-btn {

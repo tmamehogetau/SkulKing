@@ -357,7 +357,7 @@ function Home(props: {
         <input
           value=${name}
           maxlength="12"
-          placeholder="ニナ"
+          placeholder="ロジャー"
           onInput=${(event: Event) => setName((event.target as HTMLInputElement).value)}
         />
       </div>
@@ -653,6 +653,9 @@ function Table(props: {
   const isHost = props.lobby?.hostSeat === props.session.seat;
   const me = view.players.find((player) => player.seat === view.you.seat);
   const turnPlayer = view.players.find((player) => player.seat === view.turnSeat);
+  // そのラウンドで最初に札を出す人。ビッド中だけ前に出す（以降は場のリード表示が担う）。
+  const leaderName = view.players.find((player) => player.seat === view.leaderSeat)?.name ?? "?";
+  const bidding = view.phase === "bidding";
 
   // ラウンド開始と自分の手番を、短いバナーで知らせる
   const [banner, setBanner] = useState<{ id: number; title: string; sub: string } | null>(null);
@@ -716,7 +719,8 @@ function Table(props: {
   useEffect(() => {
     if (view.round === lastRoundRef.current) return;
     lastRoundRef.current = view.round;
-    showBanner(`ROUND ${view.round}`, `手札 ${view.round} 枚・ビッドから`);
+    const lead = view.players.find((player) => player.seat === view.leaderSeat)?.name ?? "?";
+    showBanner(`ROUND ${view.round}`, `手札 ${view.round} 枚・最初は ${lead}`);
   }, [view.round]);
 
   useEffect(() => {
@@ -769,6 +773,7 @@ function Table(props: {
             (player) => html`<${OpponentPlate}
               player=${player}
               active=${view.turnSeat === player.seat}
+              leader=${bidding && view.leaderSeat === player.seat}
               disconnected=${seatInfo.get(player.seat)?.connected === false}
             />`,
           )}
@@ -793,13 +798,18 @@ function Table(props: {
                 ? "このラウンドで取るトリック数を選んでください"
                 : `${turnPlayer?.name ?? "他の人"} のビッド待ち`}
             </p>
+            <p class="bid-lead">最初に札を出す人: <b>${leaderName}</b></p>
           </div>`}
         </${Arena}>
 
         <div class=${`me-zone${myTurn ? " is-active" : ""}${holding ? " is-hold" : ""}`}>
           <div class="me-bar">
             ${myTurn && html`<span class="turn-chip">あなたの番</span>`}
-            <span class="me-name">${me?.name ?? "あなた"}<span class="tag">あなた</span></span>
+            <span class="me-name">${me?.name ?? "あなた"}<span class="tag">あなた</span>${
+              bidding && view.leaderSeat === view.you.seat
+                ? html`<span class="tag tag--lead">リード</span>`
+                : null
+            }</span>
             <span class="me-stat">ビッド <b>${view.you.bid ?? "–"}</b></span>
             <span class="me-stat">取得 <b>${me?.tricksWon ?? 0}</b></span>
             <span class="me-stat">手札 <b>${view.you.hand.length}</b></span>
@@ -881,20 +891,28 @@ function Table(props: {
   `;
 }
 
-function OpponentPlate(props: { player: PublicPlayer; active: boolean; disconnected: boolean }) {
+function OpponentPlate(props: {
+  player: PublicPlayer;
+  active: boolean;
+  leader: boolean;
+  disconnected: boolean;
+}) {
   const backs = Math.min(props.player.handCount, 10);
   const made = props.player.bid !== null && props.player.bid === props.player.tricksWon;
   return html`
     <div class=${`opponent${props.active ? " is-active" : ""}`}>
       <div class="opp-head">
-        <span class="opp-name">
-          <img
-            class="seat-emblem opp-emblem"
-            src=${`/assets/emblems/${SEAT_EMBLEMS[props.player.seat % SEAT_EMBLEMS.length]}.webp`}
-            alt=""
-            draggable="false"
-          />
-          ${props.player.name}
+        <span class="opp-who">
+          <span class="opp-name">
+            <img
+              class="seat-emblem opp-emblem"
+              src=${`/assets/emblems/${SEAT_EMBLEMS[props.player.seat % SEAT_EMBLEMS.length]}.webp`}
+              alt=""
+              draggable="false"
+            />
+            ${props.player.name}
+          </span>
+          ${props.leader ? html`<span class="tag tag--lead">リード</span>` : null}
           ${props.disconnected ? html`<span class="tag">切断</span>` : null}
         </span>
         <span class="opp-score">${props.player.score}<small>点</small></span>
