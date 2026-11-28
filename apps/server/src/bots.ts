@@ -1,6 +1,7 @@
 import {
   legalPlays,
   resolveTrick,
+  type Action,
   type Card,
   type GameState,
   type LegalPlay,
@@ -143,3 +144,51 @@ export function chooseCard(state: GameState, seat: number): LegalPlay | undefine
   if (safe.length > 0) return safe[0]?.option;
   return [...scored].sort(byValue)[0]?.option;
 }
+
+const POWER_LABEL: Record<string, string> = {
+  rosie: "ロージー",
+  bendt: "ベント",
+  rascal: "ラスカル",
+  juanita: "ファニータ",
+  harry: "ハリー",
+};
+
+/** 海賊の能力をどう使うか決める（ボット用）。 */
+export function choosePower(state: GameState, seat: number): Action {
+  const pending = state.pendingPower;
+  if (!pending) throw new Error("能力待ちではありません");
+
+  if (pending.step === "discard") {
+    const player = state.players.find((p) => p.seat === seat);
+    const cheapest = [...(player?.hand ?? [])]
+      .sort((a, b) => cardValue(a) - cardValue(b))
+      .slice(0, 2)
+      .map((card) => card.id);
+    return { type: "power", seat, kind: "discard", cardIds: cheapest };
+  }
+
+  switch (pending.pirate) {
+    case "rosie":
+      // 自分でリードを続けるのがいちばん無難
+      return { type: "power", seat, kind: "lead", leaderSeat: seat };
+    case "bendt":
+      return { type: "power", seat, kind: "draw" };
+    case "rascal": {
+      const player = state.players.find((p) => p.seat === seat);
+      const amount = (player?.bid ?? 0) > 0 ? 10 : 0;
+      return { type: "power", seat, kind: "sideBet", amount };
+    }
+    case "juanita":
+      return { type: "power", seat, kind: "peek" };
+    case "harry": {
+      const player = state.players.find((p) => p.seat === seat);
+      const delta: 1 | -1 = (player?.bid ?? 0) < state.round ? 1 : -1;
+      return { type: "power", seat, kind: "bidAdjust", delta };
+    }
+  }
+}
+
+export function powerName(pirate: string): string {
+  return POWER_LABEL[pirate] ?? pirate;
+}
+

@@ -55,7 +55,8 @@ describe("得点計算", () => {
     expect(missed.players[0]).toMatchObject({ base: -10, bonus: 0, total: -10, scoreAfter: 0 });
   });
 
-  it("ボーナスは取った人にだけ入る", () => {    const summary = scoreRound({
+  it("ボーナスは取った人にだけ入る", () => {
+    const summary = scoreRound({
       round: 2,
       players: [
         { seat: 0, bid: 1, tricksWon: 1, score: 0 },
@@ -92,5 +93,23 @@ describe("得点計算", () => {
     });
     expect(broken.players[0]?.bonus).toBe(0);
     expect(broken.players[0]?.total).toBe(20);
+  });
+
+  it("ラスカルのサイドベットはビッド成否で符号が決まる", () => {
+    const made = scoreRound({
+      round: 4,
+      players: [{ seat: 0, bid: 2, tricksWon: 2, score: 0 }],
+      bonuses: [],
+      sideBets: [{ seat: 0, amount: 20 }],
+    });
+    expect(made.players[0]).toMatchObject({ sideBet: 20, total: 60 });
+
+    const missed = scoreRound({
+      round: 4,
+      players: [{ seat: 0, bid: 2, tricksWon: 1, score: 0 }],
+      bonuses: [],
+      sideBets: [{ seat: 0, amount: 10 }],
+    });
+    expect(missed.players[0]).toMatchObject({ sideBet: -10, total: -20 });
   });
 });

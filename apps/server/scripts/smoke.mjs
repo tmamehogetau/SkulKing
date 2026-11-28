@@ -213,7 +213,7 @@ await carol.waitFor((m) => m.t === "welcome", "carol welcome");
 
 carol.send({
   t: "setOptions",
-  options: { includeKraken: true, includeWhiteWhale: true, includeLoot: true },
+  options: { includeKraken: true, includeWhiteWhale: true, includeLoot: true, piratePowers: true },
 });
 await carol.waitFor(
   (m) => m.t === "lobby" && m.options?.includeKraken && m.options?.includeLoot,
@@ -229,6 +229,7 @@ const expansionState = await carol.waitFor(
   "expansion state",
 );
 check(expansionState.view.options.includeKraken, "kraken flag reaches the engine");
+  check(expansionState.view.options.piratePowers, "pirate powers flag reaches the engine");
 check(expansionState.view.options.includeWhiteWhale, "white whale flag reaches the engine");
 check(expansionState.view.options.includeLoot, "loot flag reaches the engine");
 check(
@@ -242,3 +243,5 @@ alice.close();
 bob.close();
 carol.close();
 process.exit(0);
+
+

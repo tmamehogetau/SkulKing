@@ -1,4 +1,4 @@
-import type { Card, Suit, TigressUse } from "./cards.js";
+import type { Card, PirateId, Suit, TigressUse } from "./cards.js";
 
 export type Phase = "bidding" | "playing" | "roundEnd" | "gameEnd";
 
@@ -72,15 +72,35 @@ export interface RoundPlayerSummary {
   base: number;
   /** ビッド失敗時は 0。 */
   bonus: number;
+  /** ラスカルのサイドベット（成功で +、失敗で −、未使用は 0）。 */
+  sideBet: number;
   total: number;
   scoreBefore: number;
   scoreAfter: number;
   bonuses: TrickBonus[];
+  /** 能力で変更した場合の元のビッド。 */
+  originalBid?: number;
 }
 
 export interface RoundSummary {
   round: number;
   players: RoundPlayerSummary[];
+}
+
+export type PowerStep = "choose" | "discard";
+
+/** トリックを取った海賊の能力待ち。 */
+export interface PendingPower {
+  seat: number;
+  pirate: PirateId;
+  step: PowerStep;
+  /** ラウンド最後のトリック（ハリーのみ許可）。 */
+  isFinalTrick: boolean;
+}
+
+export interface SideBet {
+  seat: number;
+  amount: number;
 }
 
 export interface GameState {
@@ -94,11 +114,16 @@ export interface GameState {
   phase: Phase;
   /** そのラウンドの最初のリード。 */
   leaderSeat: number;
-  /** 次に行動する席（ビッド or カード）。 */
+  /** 次に行動する席（ビッド or カード or 能力）。 */
   turnSeat: number;
-  deckRemaining: number;
+  /** 配り終えたあとに残った山札（ベントの引き・ファニータの覗き見用）。 */
+  deck: Card[];
+  /** ベントが捨てたカード（監査・保存則のため保持）。 */
+  discardPile: Card[];
   tricks: Trick[];
   current: Trick | null;
+  pendingPower: PendingPower | null;
+  sideBets: SideBet[];
   roundHistory: RoundSummary[];
   lastRound: RoundSummary | null;
   winnerSeats: number[];
@@ -107,7 +132,14 @@ export interface GameState {
 export type Action =
   | { type: "bid"; seat: number; bid: number }
   | { type: "playCard"; seat: number; cardId: string; tigressAs?: TigressUse }
-  | { type: "nextRound" };
+  | { type: "nextRound" }
+  | { type: "power"; seat: number; kind: "skip" }
+  | { type: "power"; seat: number; kind: "lead"; leaderSeat: number }
+  | { type: "power"; seat: number; kind: "draw" }
+  | { type: "power"; seat: number; kind: "discard"; cardIds: string[] }
+  | { type: "power"; seat: number; kind: "sideBet"; amount: number }
+  | { type: "power"; seat: number; kind: "peek" }
+  | { type: "power"; seat: number; kind: "bidAdjust"; delta: 1 | -1 };
 
 export class GameError extends Error {
   readonly code: string;
@@ -118,3 +150,4 @@ export class GameError extends Error {
     this.code = code;
   }
 }
+

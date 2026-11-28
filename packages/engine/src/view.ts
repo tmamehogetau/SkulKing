@@ -1,4 +1,4 @@
-import type { Card, Suit, TigressUse } from "./cards.js";
+import type { Card, PirateId, Suit, TigressUse } from "./cards.js";
 import { legalPlays, type LegalPlay } from "./trick.js";
 import type {
   GameOptions,
@@ -37,6 +37,13 @@ export interface PublicPlayerView {
   score: number;
 }
 
+export interface PendingPowerView {
+  seat: number;
+  pirate: PirateId;
+  step: "choose" | "discard";
+  isFinalTrick: boolean;
+}
+
 export interface PlayerView {
   /** 状態の版番号。小さいビューが届いたら捨てる。 */
   version: number;
@@ -48,6 +55,8 @@ export interface PlayerView {
   deckRemaining: number;
   options: GameOptions;
   players: PublicPlayerView[];
+  /** 海賊の能力待ち（全員に見える）。 */
+  pendingPower: PendingPowerView | null;
   you: {
     seat: number;
     name: string;
@@ -56,6 +65,12 @@ export interface PlayerView {
     legalPlays: LegalPlay[];
     canAct: boolean;
     canAdvance: boolean;
+    /** 自分の能力待ちなら中身が入る。 */
+    power: PendingPowerView | null;
+    /** ファニータで覗いた山札（本人にだけ）。 */
+    peek: Card[] | null;
+    /** ラスカルのサイドベット（このラウンド分）。 */
+    sideBet: number;
   };
   currentTrick: TrickView | null;
   tricks: TrickView[];
@@ -92,6 +107,17 @@ export function getPlayerView(state: GameState, seat: number): PlayerView {
   if (!self) throw new Error(`席 ${seat} が見つかりません`);
 
   const bidsOpen = state.phase !== "bidding";
+  const pending = state.pendingPower;
+  const myPower =
+    pending && pending.seat === seat
+      ? {
+          seat: pending.seat,
+          pirate: pending.pirate,
+          step: pending.step,
+          isFinalTrick: pending.isFinalTrick,
+        }
+      : null;
+  const sideBet = state.sideBets.find((bet) => bet.seat === seat)?.amount ?? 0;
 
   return {
     version: state.version,
@@ -100,7 +126,7 @@ export function getPlayerView(state: GameState, seat: number): PlayerView {
     totalRounds: state.options.totalRounds,
     turnSeat: state.turnSeat,
     leaderSeat: state.leaderSeat,
-    deckRemaining: state.deckRemaining,
+    deckRemaining: state.deck.length,
     options: state.options,
     players: state.players.map((p) => ({
       seat: p.seat,
@@ -110,6 +136,14 @@ export function getPlayerView(state: GameState, seat: number): PlayerView {
       tricksWon: p.tricksWon,
       score: p.score,
     })),
+    pendingPower: pending
+      ? {
+          seat: pending.seat,
+          pirate: pending.pirate,
+          step: pending.step,
+          isFinalTrick: pending.isFinalTrick,
+        }
+      : null,
     you: {
       seat: self.seat,
       name: self.name,
@@ -117,9 +151,13 @@ export function getPlayerView(state: GameState, seat: number): PlayerView {
       bid: self.bid,
       legalPlays: legalPlays(self.hand, state.current),
       canAct:
+        !pending &&
         (state.phase === "bidding" || state.phase === "playing") &&
         state.turnSeat === seat,
       canAdvance: state.phase === "roundEnd",
+      power: myPower,
+      peek: myPower && myPower.pirate === "juanita" ? state.deck.map((card) => ({ ...card })) : null,
+      sideBet,
     },
     currentTrick: state.current ? toTrickView(state.current) : null,
     tricks: state.tricks.map(toTrickView),

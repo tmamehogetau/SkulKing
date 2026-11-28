@@ -1,10 +1,18 @@
-import type { PlayerState, RoundPlayerSummary, RoundSummary, TrickBonus } from "./types.js";
+import type {
+  PlayerState,
+  RoundPlayerSummary,
+  RoundSummary,
+  SideBet,
+  TrickBonus,
+} from "./types.js";
 
 export interface RoundScoreInput {
   round: number;
   players: Pick<PlayerState, "seat" | "bid" | "tricksWon" | "score">[];
   /** そのラウンドの全トリックで発生したボーナス（平坦化済み）。 */
   bonuses: TrickBonus[];
+  /** ラスカルのサイドベット（このラウンド分）。 */
+  sideBets?: SideBet[];
 }
 
 function baseScore(bid: number, tricks: number, round: number): { base: number; bidMade: boolean } {
@@ -20,10 +28,10 @@ function baseScore(bid: number, tricks: number, round: number): { base: number; 
 /**
  * 得点計算。ビッド成功時のみボーナスが入る。
  * 略奪品の同盟ボーナスのように「相手もビッドを当てている」ことが条件のものは
- * requiresSeat で判定する。
+ * requiresSeat で判定する。ラスカルのサイドベットはビッド成否で符号が決まる。
  */
 export function scoreRound(input: RoundScoreInput): RoundSummary {
-  const { round, players, bonuses } = input;
+  const { round, players, bonuses, sideBets = [] } = input;
 
   const facts = new Map(
     players.map((player) => [
@@ -40,8 +48,10 @@ export function scoreRound(input: RoundScoreInput): RoundSummary {
       return facts.get(bonus.requiresSeat)?.bidMade === true;
     });
     const bonus = fact.bidMade ? earned.reduce((sum, item) => sum + item.points, 0) : 0;
+    const stake = sideBets.find((bet) => bet.seat === player.seat)?.amount ?? 0;
+    const sideBet = stake === 0 ? 0 : fact.bidMade ? stake : -stake;
     const scoreBefore = player.score;
-    const total = fact.base + bonus;
+    const total = fact.base + bonus + sideBet;
 
     return {
       seat: player.seat,
@@ -50,6 +60,7 @@ export function scoreRound(input: RoundScoreInput): RoundSummary {
       bidMade: fact.bidMade,
       base: fact.base,
       bonus,
+      sideBet,
       total,
       scoreBefore,
       scoreAfter: scoreBefore + total,

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type {
   BonusReason,
   Card as GameCard,
+  PendingPowerView,
   PlayerView,
   RoundSummary,
   Suit,
@@ -35,7 +36,7 @@ const SESSION_KEY = "skulking.session.v1";
 const NAME_KEY = "skulking.name.v1";
 
 const EXPANSION_OPTIONS: {
-  key: "includeKraken" | "includeWhiteWhale" | "includeLoot";
+  key: "includeKraken" | "includeWhiteWhale" | "includeLoot" | "piratePowers";
   label: string;
   description: string;
 }[] = [
@@ -53,6 +54,11 @@ const EXPANSION_OPTIONS: {
     key: "includeLoot",
     label: "略奪品",
     description: "取った人と出した人が両方ビッドを当てると +20",
+  },
+  {
+    key: "piratePowers",
+    label: "海賊の能力",
+    description: "海賊でトリックを取ると、5 種それぞれの能力を使えます",
   },
 ];
 
@@ -90,6 +96,12 @@ function saveName(name: string): void {
 
 function turnText(view: PlayerView, busy: boolean): string {
   if (busy) return "送信中…";
+  if (view.pendingPower) {
+    const owner = view.players.find((player) => player.seat === view.pendingPower?.seat);
+    return view.you.power
+      ? "海賊の能力を選んでください"
+      : `${owner?.name ?? "他の人"} が能力を選んでいます`;
+  }
   const name = view.players.find((player) => player.seat === view.turnSeat)?.name ?? "他の人";
   if (view.phase === "bidding") {
     return view.you.canAct ? "ビッドを宣言してください" : `${name} のビッド待ち`;
@@ -545,15 +557,21 @@ function Table(props: {
   const [showScores, setShowScores] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [sentAt, setSentAt] = useState<number | null>(null);
+  const [discardIds, setDiscardIds] = useState<string[]>([]);
+  const [turnPopup, setTurnPopup] = useState<{ id: number; leaving?: boolean } | null>(null);
+
   const mutedRef = useRef(props.muted);
   mutedRef.current = props.muted;
 
   const busy = sentAt !== null && sentAt === view.version;
   const myTurn = view.you.canAct && !busy;
+  const power = view.you.power;
+  const discardMode = power?.step === "discard";
 
   useEffect(() => {
     setSentAt(null);
     setSelected(null);
+    setDiscardIds([]);
   }, [view.version]);
 
   useEffect(() => {
@@ -599,6 +617,14 @@ function Table(props: {
     if (view.phase !== "bidding" || !myTurn) return;
     playSound("bid", mutedRef.current);
     act({ t: "bid", bid: value });
+  };
+
+  const toggleDiscard = (cardId: string): void => {
+    setDiscardIds((current) => {
+      if (current.includes(cardId)) return current.filter((id) => id !== cardId);
+      if (current.length >= 2) return [current[1] as string, cardId];
+      return [...current, cardId];
+    });
   };
 
   // キーボード操作: 数字でビッド / 手札選択、Enter で出す、Esc で解除
@@ -658,9 +684,10 @@ function Table(props: {
   const bidding = view.phase === "bidding";
 
   // ラウンド開始と自分の手番を、短いバナーで知らせる
-  const [banner, setBanner] = useState<{ id: number; title: string; sub: string } | null>(null);
+  const [banner, setBanner] = useState<{ id: number; title: string; sub: string; leaving?: boolean } | null>(null);
   const lastRoundRef = useRef(view.round);
-  const lastMyTurnRef = useRef(false);
+  const lastTurnKeyRef = useRef("");
+
 
   // トリックが決まった直後は、結果を少しだけ見せる。
   // 演出が残ったまま次の札を出せると、何が起きたのか分からないまま手が進む。
@@ -679,7 +706,9 @@ function Table(props: {
 
   useEffect(() => {
     if (view.tricks.length <= lastTrickCountRef.current) {
+      // ラウンドが変わってトリック数が 0 に戻ったときは、待機表示も解除する
       lastTrickCountRef.current = view.tricks.length;
+      setHolding(false);
       return;
     }
     lastTrickCountRef.current = view.tricks.length;
@@ -724,16 +753,48 @@ function Table(props: {
   }, [view.round]);
 
   useEffect(() => {
-    if (myTurn && !lastMyTurnRef.current) {
-      showBanner("あなたの番", view.phase === "bidding" ? "取るトリック数を宣言" : "出すカードを選ぶ");
-      playSound("turn", mutedRef.current);
+    // ビッドから続けてプレイに移ると myTurn が true のままなので、
+    // 「自分の番」が始まったことを phase と席の組で判定する。
+    const key = `${view.phase}:${view.turnSeat}:${view.round}`;
+    if (key === lastTurnKeyRef.current) return;
+    lastTurnKeyRef.current = key;
+    if (!(myTurn && view.turnSeat === view.you.seat)) return;
+    if (view.phase === "playing") {
+      setTurnPopup({ id: Date.now() });
+    } else if (view.phase === "bidding") {
+      showBanner("あなたの番", "取るトリック数を宣言");
     }
-    lastMyTurnRef.current = myTurn;
-  }, [myTurn, view.phase, view.round]);
+    playSound("turn", mutedRef.current);
+  }, [myTurn, view.phase, view.turnSeat, view.round]);
+
+  // 消すときは先に「出ていく」状態にして、アニメーションのあとで取り除く
+  useEffect(() => {
+    if (!turnPopup || turnPopup.leaving) return;
+    const timer = window.setTimeout(
+      () => setTurnPopup((current) => (current ? { ...current, leaving: true } : null)),
+      900,
+    );
+    return () => window.clearTimeout(timer);
+  }, [turnPopup]);
 
   useEffect(() => {
-    if (!banner) return;
-    const timer = window.setTimeout(() => setBanner(null), 2300);
+    if (!turnPopup?.leaving) return;
+    const timer = window.setTimeout(() => setTurnPopup(null), 220);
+    return () => window.clearTimeout(timer);
+  }, [turnPopup]);
+
+  useEffect(() => {
+    if (!banner || banner.leaving) return;
+    const timer = window.setTimeout(
+      () => setBanner((current) => (current ? { ...current, leaving: true } : null)),
+      2300,
+    );
+    return () => window.clearTimeout(timer);
+  }, [banner]);
+
+  useEffect(() => {
+    if (!banner?.leaving) return;
+    const timer = window.setTimeout(() => setBanner(null), 220);
     return () => window.clearTimeout(timer);
   }, [banner]);
 
@@ -742,10 +803,24 @@ function Table(props: {
       ${banner &&
       view.phase !== "roundEnd" &&
       view.phase !== "gameEnd" &&
-      html`<div class="phase-banner" key=${banner.id}>
+      html`<div class=${`phase-banner${banner.leaving ? " is-leaving" : ""}`} key=${banner.id}>
         <span class="phase-title">${banner.title}</span>
         <span class="phase-sub">${banner.sub}</span>
       </div>`}
+
+      ${turnPopup &&
+      view.phase !== "roundEnd" &&
+      view.phase !== "gameEnd" &&
+      html`<div
+        class=${`turn-popup${turnPopup.leaving ? " is-leaving" : ""}`}
+        key=${turnPopup.id}
+        role="status"
+        aria-live="polite"
+      >
+        <span class="turn-popup-title">あなたの手番です</span>
+        <span class="turn-popup-sub">カードを選んでください</span>
+      </div>`}
+
 
       <header class="hud">
         <div class="hud-brand">${SkullGlyph()}<span>SKULL KING</span></div>
@@ -813,30 +888,47 @@ function Table(props: {
             <span class="me-stat">ビッド <b>${view.you.bid ?? "–"}</b></span>
             <span class="me-stat">取得 <b>${me?.tricksWon ?? 0}</b></span>
             <span class="me-stat">手札 <b>${view.you.hand.length}</b></span>
+            <span class="me-stat me-stat--score">点数 <b>${me?.score ?? 0}</b></span>
           </div>
 
           <p class=${`hand-hint${myTurn ? " is-mine" : ""}`}>${turnText(view, busy)}</p>
 
           <div class="hand">
             ${hand.map((card, index) => {
-              const enabled =
-                view.phase === "playing" &&
-                myTurn &&
-                !holding &&
-                (optionsByCard.get(card.id)?.length ?? 0) > 0;
+              const enabled = discardMode
+                ? true
+                : view.phase === "playing" &&
+                  myTurn &&
+                  !holding &&
+                  (optionsByCard.get(card.id)?.length ?? 0) > 0;
               const mid = (hand.length - 1) / 2;
               const angle = (index - mid) * 2.4;
+              const picked = discardMode ? discardIds.includes(card.id) : selected === card.id;
               return html`<${CardView}
                 key=${card.id}
                 card=${card}
                 size="lg"
                 state=${enabled ? "play" : view.phase === "playing" ? "off" : "idle"}
-                selected=${selected === card.id}
+                selected=${picked}
                 style=${`--rot:${angle}deg; --lift:${Math.abs(index - mid) * 3}px`}
-                onClick=${() => play(card)}
+                onClick=${() =>
+                  discardMode ? toggleDiscard(card.id) : play(card)}
               />`;
             })}
           </div>
+          ${discardMode &&
+          html`<div class="power-bar">
+            <span>
+              ベントで山札から 2 枚引きました。手札から 2 枚捨ててください（${discardIds.length}/2）
+            </span>
+            <button
+              class="primary"
+              disabled=${discardIds.length !== 2 || busy}
+              onClick=${() => act({ t: "power", kind: "discard", cardIds: discardIds })}
+            >
+              この 2 枚を捨てる
+            </button>
+          </div>`}
           <p class="key-hint">数字キーで選択・Enter で出す／ビッド中は数字キーで宣言</p>
         </div>
       </section>
@@ -868,6 +960,8 @@ function Table(props: {
           </div>
         </div>
       </div>`}
+      ${power && power.step === "choose" &&
+      html`<${PowerModal} power=${power} view=${view} act=${act} />`}
       ${view.phase === "roundEnd" &&
       view.lastRound &&
       html`<${RoundOverlay}
@@ -1149,6 +1243,113 @@ function summarizeBonuses(bonuses: TrickBonus[]): BonusTagItem[] {
   return result;
 }
 
+const PIRATE_NAME: Record<string, string> = {
+  rosie: "ロージー・ディレイニー",
+  bendt: "ベント・ザ・バンディット",
+  rascal: "ラスカル・オブ・ロアタン",
+  juanita: "ファニータ・ジェイド",
+  harry: "ハリー・ザ・ジャイアント",
+};
+
+function PowerModal(props: {
+  power: PendingPowerView;
+  view: PlayerView;
+  act: (message: ClientMessage) => void;
+}) {
+  const { power, view, act } = props;
+  const name = PIRATE_NAME[power.pirate] ?? power.pirate;
+
+  const body = (() => {
+    switch (power.pirate) {
+      case "rosie":
+        return html`
+          <p class="panel-sub">次のトリックのリードを誰にするか選んでください。</p>
+          <div class="power-choices">
+            ${view.players.map(
+              (player) => html`
+                <button
+                  key=${player.seat}
+                  onClick=${() => act({ t: "power", kind: "lead", leaderSeat: player.seat })}
+                >
+                  ${player.name}${player.seat === view.you.seat ? "（自分）" : ""}
+                </button>
+              `,
+            )}
+          </div>
+        `;
+      case "bendt":
+        return html`
+          <p class="panel-sub">山札から 2 枚引いて、手札から 2 枚捨てます。</p>
+          <div class="power-choices">
+            <button class="primary" onClick=${() => act({ t: "power", kind: "draw" })}>
+              2 枚引く
+            </button>
+          </div>
+        `;
+      case "rascal":
+        return html`
+          <p class="panel-sub">ビッドに成功すれば加点、失敗すれば同じだけ減点です。</p>
+          <div class="power-choices">
+            <button onClick=${() => act({ t: "power", kind: "sideBet", amount: 0 })}>
+              賭けない
+            </button>
+            <button onClick=${() => act({ t: "power", kind: "sideBet", amount: 10 })}>
+              10 点
+            </button>
+            <button class="primary" onClick=${() => act({ t: "power", kind: "sideBet", amount: 20 })}>
+              20 点
+            </button>
+          </div>
+        `;
+      case "juanita":
+        return html`
+          <p class="panel-sub">まだ配られていない山札です（あなたにだけ見えています）。</p>
+          <div class="peek-row">
+            ${(view.you.peek ?? []).map(
+              (card) => html`<${CardView} key=${card.id} card=${card} size="sm" />`,
+            )}
+          </div>
+          <div class="power-choices">
+            <button class="primary" onClick=${() => act({ t: "power", kind: "peek" })}>
+              閉じる
+            </button>
+          </div>
+        `;
+      case "harry":
+        return html`
+          <p class="panel-sub">
+            ビッドを 1 つ増やすか減らせます（いまは ${view.you.bid ?? 0}）。
+          </p>
+          <div class="power-choices">
+            <button onClick=${() => act({ t: "power", kind: "bidAdjust", delta: -1 })}>
+              ビッド −1
+            </button>
+            <button class="primary" onClick=${() => act({ t: "power", kind: "bidAdjust", delta: 1 })}>
+              ビッド +1
+            </button>
+          </div>
+        `;
+    }
+  })();
+
+  return html`
+    <div class="overlay">
+      <div class="panel">
+        <header class="panel-head">
+          <h2>${name} の能力</h2>
+          <span class="panel-sub"
+            >${power.isFinalTrick ? "このラウンド最後のトリック" : "次のトリックの前に使えます"}</span
+          >
+        </header>
+        ${body}
+        <div class="actions">
+          <button class="ghost" onClick=${() => act({ t: "power", kind: "skip" })}>使わない</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function RoundOverlay(props: {
   summary: RoundSummary;
   view: PlayerView;
@@ -1207,6 +1408,10 @@ function RoundOverlay(props: {
                   </td>
                   <td class="cell-bonus">
                     <div class="bonus-sum">${row.bonus > 0 ? `+${row.bonus}` : "–"}</div>
+                    ${row.sideBet !== 0 &&
+                    html`<div class=${`side-bet ${row.sideBet > 0 ? "positive" : "negative"}`}>
+                      サイド ${row.sideBet > 0 ? `+${row.sideBet}` : row.sideBet}
+                    </div>`}
                     ${tags.length > 0 &&
                     html`<div class="bonus-list">
                       ${tags.map(
@@ -1360,11 +1565,44 @@ function RulesOverlay(props: { onClose: () => void }) {
           </section>
 
           <section>
+            <h3>カード構成</h3>
+            <table class="rules-table">
+              <tbody>
+                <tr><th>色札（緑・黄・紫・黒）</th><td>各 1〜14 の 14 枚 × 4 色 ＝ 56 枚</td></tr>
+                <tr><th>海賊</th><td>5 枚（ロージー、ベント、ラスカル、ファニータ、ハリー）</td></tr>
+                <tr><th>スカルキング</th><td>1 枚</td></tr>
+                <tr><th>人魚</th><td>2 枚</td></tr>
+                <tr><th>タイグレス</th><td>1 枚</td></tr>
+                <tr><th>逃走</th><td>5 枚</td></tr>
+                <tr><th>合計</th><td>70 枚（拡張込み 74 枚）</td></tr>
+              </tbody>
+            </table>
+            <p class="rules-note">
+              拡張（クラーケン 1・白クジラ 1・略奪品 2）は、ロビーで選んだときだけ入ります。
+            </p>
+          </section>
+
+          <section>
             <h3>拡張カード</h3>
             <ul>
               <li>クラーケン — 出たらそのトリックは流れ、誰も取りません</li>
               <li>白クジラ — 特殊札が勝てなくなり、場の色札の数字で決まります</li>
               <li>略奪品 — 取った人と出した人が両方ビッドを当てていれば +20</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>海賊の能力（任意）</h3>
+            <p>
+              ロビーで ON にすると、海賊でトリックを取った人が次のトリックの前に能力を使えます。
+              最後のトリックではハリー以外は使えません。使わない選択もできます。
+            </p>
+            <ul>
+              <li>ロージー — 次のトリックのリードを誰にするか選ぶ（自分でもよい）</li>
+              <li>ベント — 山札から 2 枚引いて、手札から 2 枚捨てる</li>
+              <li>ラスカル — 0・10・20 点のサイドベット（ビッド成功で加点、失敗で減点）</li>
+              <li>ファニータ — まだ配られていない山札を見る</li>
+              <li>ハリー — ビッドを 1 つ増やすか減らす</li>
             </ul>
           </section>
         </div>
@@ -1421,6 +1659,15 @@ function Scoreboard(props: { view: PlayerView; onClose: () => void }) {
     </div>
   `;
 }
+
+
+
+
+
+
+
+
+
 
 
 

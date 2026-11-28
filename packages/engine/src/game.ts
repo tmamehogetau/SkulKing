@@ -64,7 +64,7 @@ function dealRound(state: GameState): void {
   for (const player of state.players) {
     player.hand = deck.splice(0, state.round);
   }
-  state.deckRemaining = deck.length;
+  state.deck = deck;
 }
 
 export function createGame(input: CreateGameInput): GameState {
@@ -101,9 +101,12 @@ export function createGame(input: CreateGameInput): GameState {
     phase: "bidding",
     leaderSeat: 0,
     turnSeat: 0,
-    deckRemaining: 0,
+    deck: [],
+    discardPile: [],
     tricks: [],
     current: null,
+    pendingPower: null,
+    sideBets: [],
     roundHistory: [],
     lastRound: null,
     winnerSeats: [],
@@ -146,6 +149,7 @@ function finishRound(state: GameState): void {
       score: p.score,
     })),
     bonuses,
+    sideBets: state.sideBets,
   });
 
   for (const row of summary.players) {
@@ -199,6 +203,9 @@ export function applyAction(state: GameState, action: Action): GameState {
     }
 
     case "playCard": {
+      if (next.pendingPower) {
+        throw new GameError("pending_power", "先に海賊の能力を決めてください");
+      }
       if (next.phase !== "playing" || !next.current) {
         throw new GameError("phase", "今はカードを出すタイミングではありません");
       }
@@ -251,7 +258,27 @@ export function applyAction(state: GameState, action: Action): GameState {
         next.tricks.push(trick);
         next.current = null;
 
-        if (next.tricks.length >= next.round) {
+        const isFinalTrick = next.tricks.length >= next.round;
+        const winnerPlay =
+          result.winnerSeat !== null
+            ? trick.plays.find((play) => play.seat === result.winnerSeat)
+            : undefined;
+        const pirate =
+          winnerPlay && winnerPlay.card.kind === "pirate" ? winnerPlay.card.pirate : undefined;
+
+        // 海賊で取ったら、次のトリックの前に能力を選ぶ（ハリーだけは最終トリックも可）
+        if (pirate && next.options.piratePowers && (!isFinalTrick || pirate === "harry")) {
+          next.pendingPower = {
+            seat: result.winnerSeat as number,
+            pirate,
+            step: "choose",
+            isFinalTrick,
+          };
+          next.turnSeat = result.winnerSeat as number;
+          return next;
+        }
+
+        if (isFinalTrick) {
           finishRound(next);
         } else {
           next.turnSeat = result.nextLeaderSeat;
@@ -261,6 +288,115 @@ export function applyAction(state: GameState, action: Action): GameState {
         next.turnSeat = nextSeat(next, action.seat);
       }
       return next;
+    }
+
+    case "power": {
+      const pending = next.pendingPower;
+      if (!pending) {
+        throw new GameError("no_power", "能力を使う場面ではありません");
+      }
+      if (action.seat !== pending.seat) {
+        throw new GameError("turn", "あなたの能力ではありません");
+      }
+
+      const player = playerAt(next, pending.seat);
+      const lastTrick = next.tricks[next.tricks.length - 1];
+      const defaultLeader = lastTrick?.nextLeaderSeat ?? next.turnSeat;
+
+      const complete = (leaderSeat: number): GameState => {
+        next.pendingPower = null;
+        if (pending.isFinalTrick) {
+          finishRound(next);
+          return next;
+        }
+        next.turnSeat = leaderSeat;
+        next.current = newTrick(next.tricks.length + 1, leaderSeat);
+        return next;
+      };
+
+      switch (action.kind) {
+        case "skip":
+          return complete(defaultLeader);
+
+        case "lead": {
+          if (pending.pirate !== "rosie") {
+            throw new GameError("wrong_power", "ロージーの能力ではありません");
+          }
+          if (!next.players.some((p) => p.seat === action.leaderSeat)) {
+            throw new GameError("no_such_seat", "その席はありません");
+          }
+          return complete(action.leaderSeat);
+        }
+
+        case "draw": {
+          if (pending.pirate !== "bendt") {
+            throw new GameError("wrong_power", "ベントの能力ではありません");
+          }
+          if (pending.step !== "choose") {
+            throw new GameError("power_step", "すでに引いています");
+          }
+          const drawn = next.deck.splice(0, 2);
+          player.hand.push(...drawn);
+          next.pendingPower = { ...pending, step: "discard" };
+          return next;
+        }
+
+        case "discard": {
+          if (pending.pirate !== "bendt" || pending.step !== "discard") {
+            throw new GameError("power_step", "先に山札から引いてください");
+          }
+          if (action.cardIds.length !== 2) {
+            throw new GameError("discard_count", "手札から 2 枚選んでください");
+          }
+          const unique = new Set(action.cardIds);
+          if (unique.size !== 2) {
+            throw new GameError("discard_count", "同じカードは 2 回選べません");
+          }
+          for (const cardId of action.cardIds) {
+            const index = player.hand.findIndex((card) => card.id === cardId);
+            if (index < 0) {
+              throw new GameError("card_not_in_hand", "そのカードは手札にありません");
+            }
+            const removed = player.hand.splice(index, 1)[0];
+            if (removed) next.discardPile.push(removed);
+          }
+          return complete(defaultLeader);
+        }
+
+        case "sideBet": {
+          if (pending.pirate !== "rascal") {
+            throw new GameError("wrong_power", "ラスカルの能力ではありません");
+          }
+          if (![0, 10, 20].includes(action.amount)) {
+            throw new GameError("side_bet", "サイドベットは 0・10・20 から選んでください");
+          }
+          next.sideBets = next.sideBets.filter((bet) => bet.seat !== pending.seat);
+          if (action.amount > 0) {
+            next.sideBets.push({ seat: pending.seat, amount: action.amount });
+          }
+          return complete(defaultLeader);
+        }
+
+        case "peek":
+          if (pending.pirate !== "juanita") {
+            throw new GameError("wrong_power", "ファニータの能力ではありません");
+          }
+          return complete(defaultLeader);
+
+        case "bidAdjust": {
+          if (pending.pirate !== "harry") {
+            throw new GameError("wrong_power", "ハリーの能力ではありません");
+          }
+          const current = player.bid ?? 0;
+          player.bid = Math.max(0, Math.min(next.round, current + action.delta));
+          return complete(defaultLeader);
+        }
+
+        default: {
+          const exhaustive: never = action;
+          throw new GameError("unknown_action", `未知のアクション: ${String(exhaustive)}`);
+        }
+      }
     }
 
     case "nextRound": {
@@ -276,6 +412,9 @@ export function applyAction(state: GameState, action: Action): GameState {
       next.round += 1;
       next.tricks = [];
       next.current = null;
+      next.pendingPower = null;
+      next.sideBets = [];
+      next.discardPile = [];
       next.lastRound = null;
       next.leaderSeat = nextSeat(next, next.leaderSeat);
       next.turnSeat = next.leaderSeat;
@@ -295,3 +434,4 @@ export function applyAction(state: GameState, action: Action): GameState {
     }
   }
 }
+

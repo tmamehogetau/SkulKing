@@ -14,6 +14,27 @@ import {
 import { seeded, suit, special } from "./helpers.js";
 
 function botAction(state: GameState, rand: () => number): Action {
+  if (state.pendingPower) {
+    const seat = state.pendingPower.seat;
+    const pending = state.pendingPower;
+    if (pending.step === "discard") {
+      const player = state.players.find((p) => p.seat === seat);
+      const ids = (player?.hand ?? []).slice(0, 2).map((card) => card.id);
+      return { type: "power", seat, kind: "discard", cardIds: ids };
+    }
+    switch (pending.pirate) {
+      case "rosie":
+        return { type: "power", seat, kind: "lead", leaderSeat: seat };
+      case "bendt":
+        return { type: "power", seat, kind: "draw" };
+      case "rascal":
+        return { type: "power", seat, kind: "sideBet", amount: 10 };
+      case "juanita":
+        return { type: "power", seat, kind: "peek" };
+      case "harry":
+        return { type: "power", seat, kind: "bidAdjust", delta: 1 };
+    }
+  }
   if (state.phase === "bidding") {
     return {
       type: "bid",
@@ -55,7 +76,7 @@ function playFullGame(seed: number, playerCount: number, options?: Partial<GameO
     const played =
       state.tricks.reduce((sum, t) => sum + t.plays.length, 0) +
       (state.current?.plays.length ?? 0);
-    expect(inHands + played + state.deckRemaining).toBe(deckSize);
+    expect(inHands + played + state.deck.length + state.discardPile.length).toBe(deckSize);
 
     if (state.phase === "roundEnd") {
       const summary = state.lastRound;
@@ -67,7 +88,7 @@ function playFullGame(seed: number, playerCount: number, options?: Partial<GameO
       expect(tricksWon).toBe(wonTricks);
       expect(tricksWon).toBeLessThanOrEqual(state.round);
       for (const row of summary!.players) {
-        expect(row.total).toBe(row.base + row.bonus);
+        expect(row.total).toBe(row.base + row.bonus + row.sideBet);
         expect(row.scoreAfter).toBe(row.scoreBefore + row.total);
         expect(row.bid).toBeGreaterThanOrEqual(0);
         expect(row.bid).toBeLessThanOrEqual(summary!.round);
@@ -91,7 +112,7 @@ describe("ゲーム進行", () => {
     expect(state.phase).toBe("bidding");
     expect(state.round).toBe(1);
     for (const player of state.players) expect(player.hand).toHaveLength(1);
-    expect(state.deckRemaining).toBe(70 - 3);
+    expect(state.deck.length).toBe(70 - 3);
   });
 
   it("シードが同じなら同じ配布になる", () => {
@@ -202,6 +223,7 @@ describe("ゲーム進行", () => {
           includeKraken: true,
           includeWhiteWhale: true,
           includeLoot: true,
+          piratePowers: true,
         });
         expect(state.phase).toBe("gameEnd");
       }
@@ -293,3 +315,7 @@ describe("ゲーム進行", () => {
     expect(row?.total).toBe(20);
   });
 });
+
+
+
+

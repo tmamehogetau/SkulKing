@@ -19,6 +19,14 @@ export type ClientMessage =
   | { t: "start" }
   | { t: "bid"; bid: number }
   | { t: "play"; cardId: string; tigressAs?: TigressUse }
+  | {
+      t: "power";
+      kind: "skip" | "lead" | "draw" | "discard" | "sideBet" | "peek" | "bidAdjust";
+      leaderSeat?: number;
+      cardIds?: string[];
+      amount?: number;
+      delta?: 1 | -1;
+    }
   | { t: "nextRound" }
   | { t: "leave" };
 

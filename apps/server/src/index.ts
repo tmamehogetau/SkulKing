@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, resolve, sep } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
-import { GameError } from "@skulking/engine";
+import { GameError, type Action } from "@skulking/engine";
 import type { ClientMessage, ServerMessage } from "@skulking/protocol";
 import {
   RoomError,
@@ -220,6 +220,43 @@ wss.on("connection", (ws: WebSocket) => {
         return;
       }
 
+      case "power": {
+        const { room, seat } = requireSession();
+        let action: Action;
+        switch (message.kind) {
+          case "skip":
+            action = { type: "power", seat, kind: "skip" };
+            break;
+          case "lead":
+            action = { type: "power", seat, kind: "lead", leaderSeat: message.leaderSeat ?? seat };
+            break;
+          case "draw":
+            action = { type: "power", seat, kind: "draw" };
+            break;
+          case "discard":
+            action = { type: "power", seat, kind: "discard", cardIds: message.cardIds ?? [] };
+            break;
+          case "sideBet":
+            action = { type: "power", seat, kind: "sideBet", amount: message.amount ?? 0 };
+            break;
+          case "peek":
+            action = { type: "power", seat, kind: "peek" };
+            break;
+          case "bidAdjust":
+            action = {
+              type: "power",
+              seat,
+              kind: "bidAdjust",
+              delta: message.delta === -1 ? -1 : 1,
+            };
+            break;
+          default:
+            throw new RoomError("unknown_power", "不明な能力です");
+        }
+        room.act(action);
+        return;
+      }
+
       case "nextRound": {
         const { room, seat } = requireSession();
         room.markReady(seat);
@@ -303,3 +340,4 @@ setInterval(() => rooms.sweep(), 60_000).unref();
 httpServer.listen(PORT, () => {
   console.log(`Skull King server: http://localhost:${PORT}`);
 });
+

@@ -10,7 +10,7 @@ import {
   type TigressUse,
 } from "@skulking/engine";
 import type { ServerMessage } from "@skulking/protocol";
-import { chooseBid, chooseCard } from "./bots.ts";
+import { chooseBid, chooseCard, choosePower } from "./bots.ts";
 
 export const MAX_SEATS = 6;
 const ROOM_IDLE_MS = 1000 * 60 * 60 * 3;
@@ -55,7 +55,7 @@ export class Room {
   setOptions(patch: Partial<GameOptions>): void {
     if (this.started) throw new RoomError("already_started", "対戦中は設定を変えられません");
     const next: GameOptions = { ...this.options };
-    for (const key of ["includeKraken", "includeWhiteWhale", "includeLoot"] as const) {
+    for (const key of ["includeKraken", "includeWhiteWhale", "includeLoot", "piratePowers"] as const) {
       const value = patch[key];
       if (typeof value === "boolean") next[key] = value;
     }
@@ -198,7 +198,9 @@ export class Room {
       if (!current || current.phase === "gameEnd") return;
       const seat = current.turnSeat;
       try {
-        if (current.phase === "bidding") {
+        if (current.pendingPower) {
+          this.act(choosePower(current, current.pendingPower.seat));
+        } else if (current.phase === "bidding") {
           this.act({ type: "bid", seat, bid: chooseBid(current, seat) });
         } else if (current.phase === "playing") {
           const pick = chooseCard(current, seat);
@@ -298,3 +300,4 @@ export class RoomManager {
     return this.rooms.size;
   }
 }
+
